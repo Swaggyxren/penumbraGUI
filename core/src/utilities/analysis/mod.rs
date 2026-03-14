@@ -5,15 +5,18 @@
 
 pub mod aarch64;
 pub mod arm;
+pub mod thumb;
 
 pub use aarch64::Aarch64Analyzer;
 pub use arm::ArmAnalyzer;
 use downcast_rs::{Downcast, impl_downcast};
+pub use thumb::Thumb2Analyzer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arch {
     Arm,
     Aarch64,
+    Thumb2,
 }
 
 impl Arch {
@@ -87,5 +90,6 @@ pub fn create_analyzer(data: Vec<u8>, base_addr: u64, arch: Arch) -> Box<dyn Arc
     match arch {
         Arch::Aarch64 => Box::new(Aarch64Analyzer::new(data, base_addr)),
         Arch::Arm => Box::new(ArmAnalyzer::new(data, base_addr)),
+        Arch::Thumb2 => Box::new(Thumb2Analyzer::new(data, base_addr)),
     }
 }
