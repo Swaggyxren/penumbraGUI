@@ -6,6 +6,17 @@ pub use emmc::EmmcPartition;
 pub use gpt::Gpt;
 pub use ufs::UfsPartition;
 
+pub const RPMB_FRAME_DATA_SZ: usize = 0x100;
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RpmbRegion {
+    R1 = 0,
+    R2 = 1,
+    R3 = 2,
+    R4 = 3,
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageType {
@@ -66,6 +77,7 @@ pub trait Storage: Send + Sync {
     fn get_pl1_size(&self) -> u64;
     fn get_pl2_size(&self) -> u64;
     fn get_user_size(&self) -> u64;
+    fn get_rpmb_size(&self) -> u64;
 }
 
 pub fn is_pl_part(name: &str) -> bool {

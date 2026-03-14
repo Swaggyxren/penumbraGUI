@@ -129,6 +129,10 @@ impl Storage for EmmcStorage {
     fn get_user_size(&self) -> u64 {
         self.info.user_size
     }
+
+    fn get_rpmb_size(&self) -> u64 {
+        self.info.rpmb_size
+    }
 }
 
 impl EmmcStorage {

@@ -15,6 +15,7 @@ pub struct UfsInfo {
     pub lu0_size: u64,
     pub lu1_size: u64,
     pub lu2_size: u64,
+    pub lu3_size: u64,
     pub cid: Vec<u8>,
     pub fwver: Vec<u8>,
     pub serial: Vec<u8>,
@@ -99,6 +100,10 @@ impl Storage for UfsStorage {
     fn get_user_size(&self) -> u64 {
         self.info.lu2_size
     }
+
+    fn get_rpmb_size(&self) -> u64 {
+        self.info.lu3_size
+    }
 }
 
 impl UfsStorage {
@@ -120,6 +125,7 @@ impl UfsStorage {
         pos += 8;
         let lu2_size = u64::from_le_bytes(data[pos..pos + 8].try_into().unwrap());
         pos += 8;
+        let lu3_size = 0u64; // Thank you MTK
 
         let cid = data[pos..pos + 16].to_vec();
         pos += 16;
@@ -128,7 +134,17 @@ impl UfsStorage {
         let serial = data[pos + 0x1E..pos + 0x2A].to_vec();
 
         Ok(UfsStorage {
-            info: UfsInfo { kind, block_size, lu0_size, lu1_size, lu2_size, cid, fwver, serial },
+            info: UfsInfo {
+                kind,
+                block_size,
+                lu0_size,
+                lu1_size,
+                lu2_size,
+                lu3_size,
+                cid,
+                fwver,
+                serial,
+            },
         })
     }
 
@@ -137,6 +153,7 @@ impl UfsStorage {
         let lu0_size = get_tag_usize(xml, "ufs/lua0_size")? as u64;
         let lu1_size = get_tag_usize(xml, "ufs/lua1_size")? as u64;
         let lu2_size = get_tag_usize(xml, "ufs/lua2_size")? as u64;
+        let lu3_size = get_tag_usize(xml, "ufs/lua3_size").unwrap_or(0) as u64;
 
         // Older devices use ufs_cid, newer ones use id
         let cid_str: String = get_tag(xml, "ufs/ufs_cid").or_else(|_| get_tag(xml, "ufs/id"))?;
@@ -150,6 +167,7 @@ impl UfsStorage {
                 lu0_size,
                 lu1_size,
                 lu2_size,
+                lu3_size,
                 cid,
                 fwver: Vec::new(),
                 serial: Vec::new(),
