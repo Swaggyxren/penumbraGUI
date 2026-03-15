@@ -21,8 +21,11 @@ use penumbra::{Device, DeviceBuilder, find_mtk_port};
 use tokio::fs::read;
 
 use crate::cli::commands::*;
+use crate::cli::helpers::setup_file_logger;
 use crate::cli::macros::mtk_commands;
 use crate::cli::state::PersistedDeviceState;
+
+const DA_LOG_FILE: &str = "da.log";
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -39,6 +42,9 @@ pub struct CliArgs {
     /// The preloader file to use
     #[arg(short, long = "pl", value_name = "PRELOADER_FILE", global = true)]
     pub preloader_file: Option<PathBuf>,
+    /// Enable USB DA logging
+    #[arg(long = "usb-log", global = true)]
+    pub usb_log: bool,
     /// Subcommands for CLI mode. If provided, TUI mode will be disabled.
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -73,25 +79,19 @@ pub async fn run_cli(args: &CliArgs) -> Result<()> {
 
     let mut state = PersistedDeviceState::load().await;
 
-    let da_data = if let Some(cmd) = &args.command {
-        if let Some(da_path) = cmd.da() {
-            let data = read(da_path).await?;
-            state.da_file_path = Some(da_path.to_string_lossy().to_string());
-            Some(data)
-        } else {
-            None
-        }
+    let usb_log_channel = state.usb_log || args.usb_log;
+
+    let da_data = if let Some(da_path) = &args.da_file {
+        let data = read(da_path).await?;
+        state.da_file_path = Some(da_path.to_string_lossy().to_string());
+        Some(data)
     } else {
         None
     };
 
-    let pl_data = if let Some(cmd) = &args.command {
-        if let Some(pl_path) = cmd.pl() {
-            let data = read(pl_path).await?;
-            Some(data)
-        } else {
-            None
-        }
+    let pl_data = if let Some(pl_path) = &args.preloader_file {
+        let data = read(pl_path).await?;
+        Some(data)
     } else {
         None
     };
@@ -110,7 +110,18 @@ pub async fn run_cli(args: &CliArgs) -> Result<()> {
         }
     };
 
-    let mut builder = DeviceBuilder::default().with_mtk_port(mtk_port).with_verbose(args.verbose);
+    let usb_log = usb_log_channel;
+
+    let mut builder = DeviceBuilder::default()
+        .with_mtk_port(mtk_port)
+        .with_verbose(args.verbose)
+        .with_usb_log_channel(usb_log);
+
+    if usb_log {
+        if let Some(device_log) = setup_file_logger(DA_LOG_FILE).await {
+            builder = builder.with_device_log(device_log);
+        }
+    }
 
     builder = if let Some(da) = da_data {
         builder.with_da_data(da)

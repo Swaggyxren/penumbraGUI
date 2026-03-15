@@ -15,6 +15,7 @@ pub struct PersistedDeviceState {
     pub target_config: u32,
     pub connection_type: u8,
     pub flash_mode: u8,
+    pub usb_log: bool,
 }
 
 impl PersistedDeviceState {
