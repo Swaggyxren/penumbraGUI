@@ -16,14 +16,12 @@ use tokio::fs::{File, metadata};
 use tokio::io::BufReader;
 
 use crate::cli::MtkCommand;
-use crate::cli::common::{CONN_DA, CommandMetadata, DaArgs};
+use crate::cli::common::{CONN_DA, CommandMetadata};
 use crate::cli::helpers::AntumbraProgress;
 use crate::cli::state::PersistedDeviceState;
 
 #[derive(Args, Debug)]
 pub struct RscFlashArgs {
-    #[command(flatten)]
-    pub da: DaArgs,
     /// Partition to flash
     pub partition: String,
     /// File to flash
@@ -91,14 +89,6 @@ impl MtkCommand for RscFlashArgs {
 
         Ok(())
     }
-
-    fn da(&self) -> Option<&PathBuf> {
-        Some(&self.da.da_file)
-    }
-
-    fn pl(&self) -> Option<&PathBuf> {
-        self.da.preloader_file.as_ref()
-    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -131,18 +121,6 @@ impl MtkCommand for XFlashArgs {
     async fn run(&self, dev: &mut Device, state: &mut PersistedDeviceState) -> Result<()> {
         match &self.command {
             XFlashSubcommand::RscFlash(cmd) => cmd.run(dev, state).await,
-        }
-    }
-
-    fn da(&self) -> Option<&PathBuf> {
-        match &self.command {
-            XFlashSubcommand::RscFlash(cmd) => cmd.da(),
-        }
-    }
-
-    fn pl(&self) -> Option<&PathBuf> {
-        match &self.command {
-            XFlashSubcommand::RscFlash(cmd) => cmd.pl(),
         }
     }
 }

@@ -2,7 +2,6 @@
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 Shomy
 */
-use std::path::PathBuf;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -11,7 +10,7 @@ use penumbra::Device;
 use penumbra::da::protocol::BootMode;
 
 use crate::cli::MtkCommand;
-use crate::cli::common::{CONN_DA, CommandMetadata, DaArgs};
+use crate::cli::common::{CONN_DA, CommandMetadata};
 use crate::cli::state::PersistedDeviceState;
 
 #[derive(Debug, ValueEnum, Clone)]
@@ -51,8 +50,6 @@ impl From<RebootAction> for BootMode {
 pub struct RebootArgs {
     #[arg(value_enum, default_value_t = RebootAction::Normal)]
     pub action: RebootAction,
-    #[command(flatten)]
-    pub da: DaArgs,
 }
 
 #[async_trait]
@@ -67,13 +64,5 @@ impl MtkCommand for RebootArgs {
         dev.reboot(bootmode).await?;
 
         Ok(())
-    }
-
-    fn da(&self) -> Option<&PathBuf> {
-        Some(&self.da.da_file)
-    }
-
-    fn pl(&self) -> Option<&PathBuf> {
-        self.da.preloader_file.as_ref()
     }
 }

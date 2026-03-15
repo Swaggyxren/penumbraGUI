@@ -62,12 +62,6 @@ mtk_commands! {
 
 #[async_trait]
 pub trait MtkCommand {
-    fn da(&self) -> Option<&PathBuf> {
-        None
-    }
-    fn pl(&self) -> Option<&PathBuf> {
-        None
-    }
     async fn run(&self, dev: &mut Device, state: &mut PersistedDeviceState) -> Result<()>;
 }
 

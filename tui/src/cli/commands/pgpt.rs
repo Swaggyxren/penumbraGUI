@@ -2,7 +2,6 @@
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 Shomy
 */
-use std::path::PathBuf;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -12,14 +11,11 @@ use log::info;
 use penumbra::Device;
 
 use crate::cli::MtkCommand;
-use crate::cli::common::{CONN_DA, CommandMetadata, DaArgs};
+use crate::cli::common::{CONN_DA, CommandMetadata};
 use crate::cli::state::PersistedDeviceState;
 
 #[derive(Args, Debug)]
-pub struct PgptArgs {
-    #[command(flatten)]
-    pub da: DaArgs,
-}
+pub struct PgptArgs;
 
 impl CommandMetadata for PgptArgs {
     fn visible_aliases() -> &'static [&'static str] {
@@ -57,13 +53,5 @@ impl MtkCommand for PgptArgs {
         }
 
         Ok(())
-    }
-
-    fn da(&self) -> Option<&PathBuf> {
-        Some(&self.da.da_file)
-    }
-
-    fn pl(&self) -> Option<&PathBuf> {
-        self.da.preloader_file.as_ref()
     }
 }

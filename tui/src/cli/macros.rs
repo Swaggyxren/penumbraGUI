@@ -17,22 +17,6 @@ macro_rules! mtk_commands {
 
         #[async_trait::async_trait]
         impl $crate::cli::MtkCommand for Commands {
-            fn da(&self) -> Option<&std::path::PathBuf> {
-                match self {
-                    $(
-                        Commands::$variant(inner) => inner.da(),
-                    )+
-                }
-            }
-
-            fn pl(&self) -> Option<&std::path::PathBuf> {
-                match self {
-                    $(
-                        Commands::$variant(inner) => inner.pl(),
-                    )+
-                }
-            }
-
             async fn run(
                 &self,
                 dev: &mut penumbra::Device,

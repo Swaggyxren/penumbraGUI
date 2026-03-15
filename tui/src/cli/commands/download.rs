@@ -13,14 +13,12 @@ use tokio::fs::{File, metadata};
 use tokio::io::BufReader;
 
 use crate::cli::MtkCommand;
-use crate::cli::common::{CONN_DA, CommandMetadata, DaArgs};
+use crate::cli::common::{CONN_DA, CommandMetadata};
 use crate::cli::helpers::AntumbraProgress;
 use crate::cli::state::PersistedDeviceState;
 
 #[derive(Args, Debug)]
 pub struct DownloadArgs {
-    #[command(flatten)]
-    pub da: DaArgs,
     /// The partition to flash
     pub partition: String,
     /// The file to download
@@ -100,13 +98,5 @@ impl MtkCommand for DownloadArgs {
         info!("Download to partition '{}' completed.", self.partition);
 
         Ok(())
-    }
-
-    fn da(&self) -> Option<&PathBuf> {
-        Some(&self.da.da_file)
-    }
-
-    fn pl(&self) -> Option<&PathBuf> {
-        self.da.preloader_file.as_ref()
     }
 }

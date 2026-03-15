@@ -2,7 +2,6 @@
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 Shomy
 */
-use std::path::PathBuf;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -12,7 +11,7 @@ use penumbra::Device;
 use penumbra::core::seccfg::LockFlag;
 
 use crate::cli::MtkCommand;
-use crate::cli::common::{CONN_DA, CommandMetadata, DaArgs};
+use crate::cli::common::{CONN_DA, CommandMetadata};
 use crate::cli::state::PersistedDeviceState;
 
 #[derive(Debug, ValueEnum, Clone)]
@@ -24,8 +23,6 @@ pub enum SeccfgAction {
 #[derive(Args, Debug)]
 pub struct SeccfgArgs {
     pub action: SeccfgAction,
-    #[command(flatten)]
-    pub da: DaArgs,
 }
 
 impl CommandMetadata for SeccfgArgs {
@@ -74,13 +71,5 @@ impl MtkCommand for SeccfgArgs {
         }
 
         Ok(())
-    }
-
-    fn da(&self) -> Option<&PathBuf> {
-        Some(&self.da.da_file)
-    }
-
-    fn pl(&self) -> Option<&PathBuf> {
-        self.da.preloader_file.as_ref()
     }
 }

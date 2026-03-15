@@ -13,14 +13,12 @@ use tokio::fs::{File, create_dir_all, read_dir};
 use tokio::io::{AsyncWriteExt, BufWriter};
 
 use crate::cli::MtkCommand;
-use crate::cli::common::{CONN_DA, CommandMetadata, DaArgs};
+use crate::cli::common::{CONN_DA, CommandMetadata};
 use crate::cli::helpers::AntumbraProgress;
 use crate::cli::state::PersistedDeviceState;
 
 #[derive(Args, Debug)]
 pub struct ReadAllArgs {
-    #[command(flatten)]
-    pub da: DaArgs,
     /// The partition to read
     pub output_dir: PathBuf,
     /// The destination file
@@ -114,13 +112,5 @@ impl MtkCommand for ReadAllArgs {
         info!("All partitions read successfully.");
 
         Ok(())
-    }
-
-    fn da(&self) -> Option<&PathBuf> {
-        Some(&self.da.da_file)
-    }
-
-    fn pl(&self) -> Option<&PathBuf> {
-        self.da.preloader_file.as_ref()
     }
 }
