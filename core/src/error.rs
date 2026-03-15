@@ -504,6 +504,26 @@ pub enum XFlashErrorKind {
     #[error("DA: Exceeded maximum allowed number")]
     DaExceedMaxNum = 0xC0070005,
 
+    // Extensions
+    #[error("Extensions: Download ack is not OK")]
+    ExtensionsDownloadAckNotOk = 0xC00E0001,
+    #[error("Extensions: Upload ack is not OK")]
+    ExtensionsUploadAckNotOk = 0xC00E0002,
+    #[error("Extensions: SEJ AES data length exceed max length")]
+    ExtensionsSejExceedMaxLen = 0xC00E0003,
+    #[error("Extensions: Malloc failed")]
+    ExtensionsMallocFailed = 0xC00E0004,
+    #[error("Extensions: RPMB not initialized")]
+    ExtensionsRpmbNotInit = 0xC00E0005,
+    #[error("Extensions: RPMB read failed")]
+    ExtensionsRpmbReadFailed = 0xC00E0006,
+    #[error("Extensions: RPMB write failed")]
+    ExtensionsRpmbWriteFailed = 0xC00E0007,
+    #[error("Extensions: RPMB key invalid.")]
+    ExtensionsRpmbKeyInvalid = 0xC00E0008,
+    #[error("Extensions: RPMB support is not available on this storage type.")]
+    ExtensionsRpmbStorageNotSupported = 0xC00E0009,
+
     #[error("Unknown error")]
     Unknown = 0xFFFFFFFF,
 }
