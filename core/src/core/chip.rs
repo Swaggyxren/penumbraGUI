@@ -246,6 +246,14 @@ pub const MT6893: ChipInfo = ChipBuilder::new("MT6893/Dimensity 1200", 0x950)
     .with_uart(0x11002000)
     .build();
 
+pub const MT6878: ChipInfo =
+    ChipBuilder::new("MT6878/Dimensity 7300/7300X/7360/7400/7400X", 0x1375)
+        .with_sej_base(0x1040E000)
+        .with_tzcc_base(0x10400000)
+        .with_wdt(0x1C00A000)
+        .with_uart(0x11001000)
+        .build();
+
 pub const MT6877: ChipInfo = ChipBuilder::new("MT6877/Dimensity 900", 0x959)
     .with_sej_base(0x1000A000)
     .with_tzcc_base(0x10210000)
@@ -399,6 +407,7 @@ pub const fn chip_from_hw_code(hw_code: u16) -> &'static ChipInfo {
         0x1208 => &MT6789,
         0x1209 => &MT6835,
         0x1229 => &MT6886,
+        0x1375 => &MT6878,
         0x1296 => &MT6985,
         0x1357 => &MT6991,
         0x1471 => &MT6993,
