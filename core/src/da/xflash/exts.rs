@@ -142,7 +142,7 @@ fn prepare_extensions(xflash: &XFlash) -> Option<Vec<u8>> {
 
     debug!("Found mmc_get_card at 0x{:08X}", mmc_get_card);
 
-    let uart_base = xflash.chip().uart() as u32;
+    let uart_base = xflash.chip().uart();
 
     debug!("UART base address at 0x{:X}", uart_base);
 

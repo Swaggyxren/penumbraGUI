@@ -35,7 +35,7 @@ use crate::da::{DA, DAEntryRegion, DAProtocol, XFlash};
 use crate::error::{Error, Result, XFlashError};
 #[cfg(not(feature = "no_exploits"))]
 use crate::exploit::{Carbonara, Exploit, Kamakiri};
-use crate::{exploit, le_u16, le_u32};
+use crate::{exploit, le_u32};
 
 #[async_trait::async_trait]
 impl DAProtocol for XFlash {
@@ -124,8 +124,7 @@ impl DAProtocol for XFlash {
     }
 
     async fn get_status(&mut self) -> Result<u32> {
-        let mut hdr = [0u8; 12];
-        match timeout(Duration::from_millis(3000), self.conn.read(&mut hdr)).await {
+        let data = match timeout(Duration::from_millis(3000), self.read_data()).await {
             Ok(result) => result?,
             Err(_) => {
                 debug!("Status timeout");
@@ -133,21 +132,12 @@ impl DAProtocol for XFlash {
             }
         };
 
-        debug!("[RX] Status Header: {:02X?}", hdr);
-        let len = self.parse_header(&hdr)?;
+        if data.is_empty() {
+            debug!("[RX] Status: empty data");
+            return Err(Error::XFlash(XFlashError::from_code(0xFFFFFFFF)));
+        }
 
-        let mut data = vec![0u8; len as usize];
-        self.conn.read(&mut data).await?;
-        let status = match len {
-            2 => le_u16!(data, 0) as u32,
-            4 => {
-                let val = le_u32!(data, 0);
-                if val == Cmd::Magic as u32 { 0 } else { val }
-            }
-            _ if data.len() >= 4 => le_u32!(data, 0),
-            _ if !data.is_empty() => data[0] as u32,
-            _ => 0xFFFFFFFF,
-        };
+        let status = le_u32!(data, 0);
 
         debug!("[RX] Status: 0x{:08X}", status);
         match status {

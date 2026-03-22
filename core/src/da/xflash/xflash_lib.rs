@@ -180,13 +180,15 @@ impl XFlash {
             2 // INFO
         };
 
+        let log_channel: u32 = 1 + self.usb_log_channel as u32;
+
         // Force logs through UART regardless.
         // For some reason, as the error mentioned above, the DA just hangs if we set logs
         // through USB, regardless of the bootup mode.
         // TODO: Figure out why!
         let env_params: [u32; 5] = [
             da_log_level, // da_log_level
-            1,            // log_channel = 1: UART, 2: Usb, 3: Both
+            log_channel,  // log_channel = 1: UART, 2: Usb, 3: Both
             1,            // system_os = OS_LINUX
             0,            // ufs_provision
             0,            // reserved
@@ -369,30 +371,10 @@ impl XFlash {
         Ok(())
     }
 
-    pub(super) fn generate_header(&self, data: &[u8]) -> [u8; 12] {
-        let mut hdr = [0u8; 12];
-
-        // efeeeefe | 010000000 | 04000000 (Data Length)
-        hdr[0..4].copy_from_slice(&(Cmd::Magic as u32).to_le_bytes());
-        hdr[4..8].copy_from_slice(&(DataType::Flow as u32).to_le_bytes());
-        hdr[8..12].copy_from_slice(&(data.len() as u32).to_le_bytes());
-
-        debug!("[TX] Data Header: {:02X?}, Data Length: {}", hdr, data.len());
-
-        hdr
-    }
-
-    pub(super) fn parse_header(&self, hdr: &[u8; 12]) -> Result<u32> {
-        let magic = le_u32!(hdr, 0);
-        let len = le_u32!(hdr, 8);
-
-        if magic != Cmd::Magic as u32 {
-            return Err(Error::io("Invalid magic"));
-        }
-
-        debug!("[RX] Data Length from Header: 0x{:X}", len);
-
-        Ok(len)
+    pub(super) fn generate_header(&self, data: &[u8]) -> [u8; PacketHeader::SIZE] {
+        let hdr = PacketHeader::new(data.len() as u32);
+        debug!("[TX] Packet header sent: 0x{:X} bytes", data.len());
+        hdr.to_bytes()
     }
 
     async fn handle_emi(&mut self) -> Result<()> {
