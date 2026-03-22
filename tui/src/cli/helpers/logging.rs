@@ -23,7 +23,7 @@ pub async fn setup_file_logger(path: &str) -> Option<DeviceLog> {
             });
 
             let device_log = DeviceLog::with_on_push(Box::new(move |msg| {
-                let _ = tx.try_send(format!("{}\n", msg));
+                let _ = tx.try_send(msg.into());
             }));
 
             Some(device_log)
