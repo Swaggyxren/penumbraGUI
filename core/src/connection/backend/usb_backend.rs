@@ -11,7 +11,7 @@ use log::debug;
 use nusb::descriptors::TransferType;
 use nusb::io::{EndpointRead, EndpointWrite};
 use nusb::transfer::{Bulk, ControlIn, ControlOut, ControlType, Direction, In, Out, Recipient};
-use nusb::{DeviceInfo, Interface};
+use nusb::{Device, DeviceInfo, Interface};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::MTKPort;
@@ -138,6 +138,28 @@ impl UsbMTKPort {
         debug!("CDC Setup complete");
         Ok(())
     }
+
+    /*
+     * Some devices don't have the bulk iface on 1, but on 0, so we gotta adapt!!
+     */
+    fn find_cdc_interface_numbers(device: &Device) -> Result<(u8, u8)> {
+        let settings: Vec<(u8, u8)> = device
+            .configurations()
+            .flat_map(|c| c.interfaces())
+            .flat_map(|i| {
+                i.alt_settings().map(|a| (a.class(), a.interface_number())).collect::<Vec<_>>()
+            })
+            .collect();
+
+        let ctrl_num = settings.iter().find(|(class, _)| *class == 2).map(|(_, n)| *n);
+        let bulk_num = settings.iter().find(|(class, _)| *class == 10).map(|(_, n)| *n);
+
+        match (ctrl_num, bulk_num) {
+            (Some(c), Some(b)) => Ok((c, b)),
+            (None, _) => Err(Error::io("Missing CDC control interface")),
+            (_, None) => Err(Error::io("Missing CDC bulk/data interface")),
+        }
+    }
 }
 
 #[async_trait]
@@ -147,38 +169,42 @@ impl MTKPort for UsbMTKPort {
             return Ok(());
         }
 
-        let device = self.info.open().await?;
-        let ctrl_iface = device.detach_and_claim_interface(0).await?;
-        let iface = device.detach_and_claim_interface(1).await?;
+        let device = self.info.open().await.map_err(|e| {
+            log::error!("Failed to open device: {e}");
+            Error::io("Failed to open device")
+        })?;
 
-        self.select_endpoints(&iface)?;
+        let (ctrl_num, bulk_num) = Self::find_cdc_interface_numbers(&device)?;
 
-        // Seem to be a windows bug
-        #[cfg(windows)]
-        let tr = 1;
+        self.ctrl_interface = Some(device.detach_and_claim_interface(ctrl_num).await?);
+        let bulk_iface = device.detach_and_claim_interface(bulk_num).await?;
 
-        #[cfg(not(windows))]
-        let tr = 8;
+        self.select_endpoints(&bulk_iface)?;
+        let tr = if cfg!(windows) { 1 } else { 8 };
 
-        let ep_in = iface.endpoint::<Bulk, In>(self.ep_in)?;
-        let rdr = ep_in.reader(BULK_IN_SZ).with_num_transfers(tr).with_read_timeout(MAX_TIMEOUT);
-        let ep_out = iface.endpoint::<Bulk, Out>(self.ep_out)?;
-        let wr = ep_out.writer(BULK_OUT_SZ).with_num_transfers(tr).with_write_timeout(MAX_TIMEOUT);
+        self.reader = Some(
+            bulk_iface
+                .endpoint::<Bulk, In>(self.ep_in)?
+                .reader(BULK_IN_SZ)
+                .with_num_transfers(tr)
+                .with_read_timeout(MAX_TIMEOUT),
+        );
 
-        self.reader = Some(rdr);
-        self.writer = Some(wr);
-        self.interface = Some(iface);
-        self.ctrl_interface = Some(ctrl_iface);
+        self.writer = Some(
+            bulk_iface
+                .endpoint::<Bulk, Out>(self.ep_out)?
+                .writer(BULK_OUT_SZ)
+                .with_num_transfers(tr)
+                .with_write_timeout(MAX_TIMEOUT),
+        );
 
-        // CDC setup is needed for preloader and DA modes on all platforms
-        if self.connection_type != ConnectionType::Brom
-            && let Err(e) = self.setup_cdc().await
-        {
-            debug!("CDC setup failed (may be ok): {:?}", e);
+        self.interface = Some(bulk_iface);
+
+        if self.connection_type != ConnectionType::Brom {
+            let _ = self.setup_cdc().await;
         }
 
         self.is_open = true;
-
         Ok(())
     }
 
