@@ -205,14 +205,14 @@ impl DownloadProtocol for XFlash {
         addr: u64,
         size: usize,
         section: PartitionKind,
-        mut progress: F,
-        mut writer: W,
+        progress: F,
+        writer: W,
     ) -> Result<()>
     where
         W: Write + Send,
         F: FnMut(usize, usize) + Send,
     {
-        flash::read_flash(self, addr, size, section, &mut progress, &mut writer)
+        flash::read_flash(self, addr, size, section, progress, writer)
     }
 
     fn write_flash<R, F>(

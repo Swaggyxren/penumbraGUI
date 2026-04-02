@@ -172,14 +172,15 @@ pub fn write32_ext(xflash: &mut XFlash, addr: u32, value: u32) -> Result<()> {
     Ok(())
 }
 
-pub fn peek<F>(
+pub fn peek<W, F>(
     xflash: &mut XFlash,
     addr: u32,
     length: usize,
-    writer: &mut (dyn Write + Send),
+    writer: W,
     mut progress: F,
 ) -> Result<()>
 where
+    W: Write + Send,
     F: FnMut(usize, usize) + Send,
 {
     let mut range = [0u8; 16];
@@ -194,14 +195,15 @@ where
     Ok(())
 }
 
-pub fn poke<F>(
+pub fn poke<R, F>(
     xflash: &mut XFlash,
     addr: u32,
     length: usize,
-    reader: &mut (dyn Read + Send),
+    reader: R,
     mut progress: F,
 ) -> Result<()>
 where
+    R: Read + Send,
     F: FnMut(usize, usize) + Send,
 {
     let mut range = [0u8; 16];
@@ -238,8 +240,8 @@ pub fn sej(
     let mut payload = vec![0u8; data.len()];
     let mut writer = Cursor::new(&mut payload);
 
-    xflash.download_data(data.len(), &mut reader, &mut |_, _| {})?;
-    xflash.upload_data(data.len(), &mut writer, &mut |_, _| {})?;
+    xflash.download_data(data.len(), &mut reader, |_, _| {})?;
+    xflash.upload_data(data.len(), &mut writer, |_, _| {})?;
 
     status_ok!(xflash);
 
@@ -259,15 +261,16 @@ fn init_rpmb(xflash: &mut XFlash, region: RpmbRegion) -> Result<()> {
     Ok(())
 }
 
-pub fn read_rpmb<F>(
+pub fn read_rpmb<W, F>(
     xflash: &mut XFlash,
     region: RpmbRegion,
     start_sector: u32,
     sectors_count: u32,
-    writer: &mut (dyn Write + Send),
+    writer: W,
     mut progress: F,
 ) -> Result<()>
 where
+    W: Write + Send,
     F: FnMut(usize, usize) + Send,
 {
     init_rpmb(xflash, region)?;
@@ -299,15 +302,16 @@ where
     Ok(())
 }
 
-pub fn write_rpmb<F>(
+pub fn write_rpmb<R, F>(
     xflash: &mut XFlash,
     region: RpmbRegion,
     start_sector: u32,
     sectors_count: u32,
-    reader: &mut (dyn Read + Send),
+    reader: R,
     mut progress: F,
 ) -> Result<()>
 where
+    R: Read + Send,
     F: FnMut(usize, usize) + Send,
 {
     init_rpmb(xflash, region)?;

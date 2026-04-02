@@ -305,15 +305,16 @@ fn init_rpmb(xml: &mut Xml, region: RpmbRegion) -> Result<()> {
     Ok(())
 }
 
-pub fn read_rpmb<F>(
+pub fn read_rpmb<W, F>(
     xml: &mut Xml,
     region: RpmbRegion,
     start_sector: u32,
     sectors_count: u32,
-    writer: &mut (dyn Write + Send),
+    writer: W,
     mut progress: F,
 ) -> Result<()>
 where
+    W: Write + Send,
     F: FnMut(usize, usize) + Send,
 {
     init_rpmb(xml, region)?;
@@ -338,15 +339,16 @@ where
     Ok(())
 }
 
-pub fn write_rpmb<F>(
+pub fn write_rpmb<R, F>(
     xml: &mut Xml,
     region: RpmbRegion,
     start_sector: u32,
     sectors_count: u32,
-    reader: &mut (dyn Read + Send),
+    reader: R,
     mut progress: F,
 ) -> Result<()>
 where
+    R: Read + Send,
     F: FnMut(usize, usize) + Send,
 {
     init_rpmb(xml, region)?;

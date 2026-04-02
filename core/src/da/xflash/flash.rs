@@ -13,14 +13,18 @@ use crate::da::xflash::cmds::*;
 use crate::error::{Error, Result};
 use crate::{le_u32, le_u64};
 
-pub fn read_flash(
+pub fn read_flash<W, F>(
     xflash: &mut XFlash,
     addr: u64,
     size: usize,
     section: PartitionKind,
-    progress: &mut (dyn FnMut(usize, usize) + Send),
-    writer: &mut (dyn Write + Send),
-) -> Result<()> {
+    progress: F,
+    writer: W,
+) -> Result<()>
+where
+    W: Write + Send,
+    F: FnMut(usize, usize) + Send,
+{
     info!("Reading flash at address {:#X} with size {:#X}", addr, size);
 
     let storage_type = xflash.get_storage_type() as u32;
@@ -56,14 +60,18 @@ pub fn read_flash(
     Ok(())
 }
 
-pub fn write_flash(
+pub fn write_flash<R, F>(
     xflash: &mut XFlash,
     addr: u64,
     size: usize,
-    reader: &mut (dyn Read + Send),
+    reader: R,
     section: PartitionKind,
-    progress: &mut (dyn FnMut(usize, usize) + Send),
-) -> Result<()> {
+    progress: F,
+) -> Result<()>
+where
+    F: FnMut(usize, usize) + Send,
+    R: Read + Send,
+{
     get_packet_length(xflash)?;
 
     info!("Writing flash at address {:#X} with size {:#X}", addr, size);
@@ -87,13 +95,16 @@ pub fn write_flash(
     Ok(())
 }
 
-pub fn erase_flash(
+pub fn erase_flash<F>(
     xflash: &mut XFlash,
     addr: u64,
     size: usize,
     section: PartitionKind,
-    progress: &mut (dyn FnMut(usize, usize) + Send),
-) -> Result<()> {
+    progress: F,
+) -> Result<()>
+where
+    F: FnMut(usize, usize) + Send,
+{
     info!("Erasing flash at address {:#X} with size {:#X}", addr, size);
 
     let storage_type = xflash.get_storage_type() as u32;
@@ -122,13 +133,17 @@ pub fn erase_flash(
     Ok(())
 }
 
-pub fn download(
+pub fn download<R, F>(
     xflash: &mut XFlash,
     part_name: String,
     size: usize,
-    reader: &mut (dyn Read + Send),
-    progress: &mut (dyn FnMut(usize, usize) + Send),
-) -> Result<()> {
+    reader: R,
+    progress: F,
+) -> Result<()>
+where
+    R: Read + Send,
+    F: FnMut(usize, usize) + Send,
+{
     // Works like write_flash, but instead of address and size, it takes a partition name
     // and writes the whole data to it.
     // The main difference betwen write_flash and this function is that this one
@@ -158,12 +173,11 @@ pub fn download(
     Ok(())
 }
 
-pub fn upload(
-    xflash: &mut XFlash,
-    part_name: String,
-    writer: &mut (dyn Write + Send),
-    progress: &mut (dyn FnMut(usize, usize) + Send),
-) -> Result<()> {
+pub fn upload<W, F>(xflash: &mut XFlash, part_name: String, writer: W, progress: F) -> Result<()>
+where
+    W: Write + Send,
+    F: FnMut(usize, usize) + Send,
+{
     xflash.send_cmd(Cmd::Upload)?;
     xflash.send(part_name.as_bytes())?;
 
@@ -185,20 +199,14 @@ pub fn upload(
     Ok(())
 }
 
-pub fn format(
-    xflash: &mut XFlash,
-    part_name: String,
-    progress: &mut (dyn FnMut(usize, usize) + Send),
-) -> Result<()> {
-    let part = match xflash.dev_info.get_partition(&part_name) {
-        Some(p) => p,
-        None => {
-            return Err(Error::proto(format!(
-                "Partition '{}' not found in partition table",
-                part_name
-            )));
-        }
-    };
+pub fn format<F>(xflash: &mut XFlash, part_name: String, progress: F) -> Result<()>
+where
+    F: FnMut(usize, usize) + Send,
+{
+    let part = xflash
+        .dev_info
+        .get_partition(&part_name)
+        .ok_or(Error::proto(format!("Partition '{}' not found in partition table", part_name)))?;
 
     xflash.send_cmd(Cmd::DeviceCtrl)?;
     xflash.send_cmd(Cmd::StartDlInfo)?;

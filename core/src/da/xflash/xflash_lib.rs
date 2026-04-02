@@ -229,12 +229,11 @@ impl XFlash {
 
     /// Receives data from the device, writing it to the provided writer.
     /// Common loop for `read_flash` and `upload`.
-    pub fn upload_data(
-        &mut self,
-        size: usize,
-        writer: &mut (dyn Write + Send),
-        progress: &mut (dyn FnMut(usize, usize) + Send),
-    ) -> Result<()> {
+    pub fn upload_data<W, F>(&mut self, size: usize, mut writer: W, mut progress: F) -> Result<()>
+    where
+        W: Write + Send,
+        F: FnMut(usize, usize) + Send,
+    {
         let mut bytes_read = 0;
         progress(0, size);
         loop {
@@ -267,34 +266,33 @@ impl XFlash {
     ///
     /// If we receive less data than requested from the reader,
     /// we pad the remaining bytes with 0s and send it anyway.
-    pub fn download_data(
-        &mut self,
-        size: usize,
-        reader: &mut (dyn Read + Send),
-        progress: &mut (dyn FnMut(usize, usize) + Send),
-    ) -> Result<()> {
+    pub fn download_data<R, F>(&mut self, size: usize, reader: R, progress: F) -> Result<()>
+    where
+        R: Read + Send,
+        F: FnMut(usize, usize) + Send,
+    {
         let chunk_size = self.write_packet_length.unwrap_or(0x8000);
         self.download_data_with(size, chunk_size, reader, progress)
     }
 
     /// Same as `download_data`, but with a custom chunk size.
     /// Useful for limiting the packet size when needed.
-    pub fn download_data_with(
+    pub fn download_data_with<R, F>(
         &mut self,
         size: usize,
         chunk_size: usize,
-        reader: &mut (dyn Read + Send),
-        progress: &mut (dyn FnMut(usize, usize) + Send),
-    ) -> Result<()> {
+        mut reader: R,
+        mut progress: F,
+    ) -> Result<()>
+    where
+        R: Read + Send,
+        F: FnMut(usize, usize) + Send,
+    {
         let mut buffer = vec![0u8; chunk_size];
         let mut bytes_written = 0;
 
         progress(0, size);
-        loop {
-            if bytes_written >= size {
-                break;
-            }
-
+        while bytes_written < size {
             // It is mandatory to make data size the same as size, or we will be leaving
             // older data in the partition. Usually, this is not an issue for partitions
             // with an header, like LK (which stores the start and length of the lk image),
@@ -331,11 +329,10 @@ impl XFlash {
         Ok(())
     }
 
-    pub fn progress_report(
-        &mut self,
-        size: usize,
-        progress: &mut (dyn FnMut(usize, usize) + Send),
-    ) -> Result<()> {
+    pub fn progress_report<F>(&mut self, size: usize, mut progress: F) -> Result<()>
+    where
+        F: FnMut(usize, usize) + Send,
+    {
         progress(0, size);
         loop {
             let status = self.read_data()?;
