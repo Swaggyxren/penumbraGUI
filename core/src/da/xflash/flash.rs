@@ -242,37 +242,26 @@ where
     // 256 bytes (data)
 
     let mut offset = 0u64;
-    let mut buffer = vec![0u8; 256];
+
+    let mut buffer = [0u8; 256];
+    let mut payload = [0u8; 328];
+    let mut part_name_bytes = [0u8; 64];
+
+    let name_bytes = part_name.as_bytes();
+    let name_len = name_bytes.len().min(63);
+    part_name_bytes[..name_len].copy_from_slice(&name_bytes[..name_len]);
 
     loop {
-        let mut payload = Vec::new();
-        // First byte is 0
-        payload.push(0x00);
-
-        let offset_bytes = offset.to_le_bytes();
-        payload.extend_from_slice(&offset_bytes[..7]);
-
-        let mut part_name_bytes = vec![0u8; 64];
-        let name_bytes = part_name.as_bytes();
-        let name_len = name_bytes.len().min(63);
-        part_name_bytes[..name_len].copy_from_slice(&name_bytes[..name_len]);
-        payload.extend_from_slice(&part_name_bytes);
-
         let bytes_read = reader.read(&mut buffer)?;
         if bytes_read == 0 {
             break;
         }
 
-        let chunk = if bytes_read < 256 {
-            let mut chunk_buf = vec![0u8; 256];
-            chunk_buf[..bytes_read].copy_from_slice(&buffer[..bytes_read]);
-            chunk_buf
-        } else {
-            buffer[..].to_vec()
-        };
-
-        payload.extend_from_slice(&chunk);
-        assert_eq!(payload.len(), 328);
+        let offset_bytes = offset.to_le_bytes();
+        payload[1..8].copy_from_slice(&offset_bytes[..7]);
+        payload[8..72].copy_from_slice(&part_name_bytes);
+        payload[72..328].fill(0); // Better to avoid stale data
+        payload[72..72 + bytes_read].copy_from_slice(&buffer[..bytes_read]);
 
         xflash.devctrl(Cmd::SetRscInfo, Some(&[&payload]))?;
 
