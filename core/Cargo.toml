@@ -15,7 +15,6 @@ keywords = ["MediaTek", "flashing", "bootloader", "android"]
 
 [dependencies]
 aes = "0.8.4"
-async-trait = "0.1.89"
 cbc = "0.1.2"
 cipher = "0.4.4"
 crc32fast = "1.5.0"
@@ -35,6 +34,7 @@ sha1 = "0.10.6"
 sha2 = "0.10.9"
 simple-xml = "0.1.10"
 thiserror = "2.0.17"
+wincode = { version = "0.5.1", features = ["derive"] }
 xmlcmd-derive = { path = "xmlcmd_derive" }
 
 [features]
