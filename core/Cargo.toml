@@ -41,7 +41,6 @@ xmlcmd-derive = { path = "xmlcmd_derive" }
 [features]
 default = ["nusb"]
 libusb = ["rusb"]
-serial = ["serialport",]
-libusb-exp = []
+serial = ["serialport"]
 no_localslakeyring = []
 no_exploits = []
