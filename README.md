@@ -7,11 +7,7 @@ It provides flashing and readback capabilities, as well as bootloader unlocking 
 
 ## Requirements
 
-* On Windows, you'll need to install Mediatek Drivers.
-> [!WARNING]
-> Penumbra on Windows is currently half broken, and only occasionally works by replacing the MediaTek drivers with LibUSB using Zadig.<br>
-> Please, do not open a new issue in case of problems with Windows, but rather leave a comment on [#27](https://github.com/shomykohai/penumbra/issues/27).
-> It is strongly suggested to use Linux instead, where Penumbra has been tested more and confirmed to work.
+* On Windows, you'll need to install WinUsb or Libusb drivers on the device. You can use [Zadig](https://zadig.akeo.ie/) for that, or the provided driver installer.
 * On Linux you'll need to install `libudev` and add your user to the `dialout` group. In case Penumbra doesn't recognize the device, run with sudo or allow access to the device with udev rules.
 
 ## Usage
@@ -24,51 +20,52 @@ For using the crate, use the device API:
 
 ```rs
 use std::fs::File;
+use std::io::{BufWriter, Write};
 
 use anyhow::Result;
-use env_logger::Builder;
-use penumbra::{Device, DeviceBuilder, find_mtk_port};
-use tokio::io::{AsyncWriteExt, BufWriter};
+use penumbra::{DeviceBuilder, find_mtk_port, LockFlag};
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     env_logger::init();
+
     let da_path = std::path::Path::new("../DA_penangf.bin");
     let da_data = std::fs::read(da_path).expect("Failed to read DA file");
 
     println!("Searching for MTK port...");
     let mtk_port = loop {
-        if let Some(port) = find_mtk_port().await {
+        if let Some(port) = find_mtk_port() {
             break port;
         }
-    }
+    };
 
     println!("Found MTK port: {}", mtk_port.get_port_name());
-    
+
     let mut device = DeviceBuilder::default()
         .with_mtk_port(mtk_port)
         .with_da_data(da_data)
-        .build()?
-    
+        .build()?;
+
     // Init the device (Handshake and populate dev info)
-    dev.init().await?;
-    
-    let tgt_cfg = dev.dev_info.target_config().await;
+    device.init()?;
+
+    let tgt_cfg = device.dev_info.target_config();
     println!("SBC: {}", (tgt_cfg & 0x1) != 0);
-    
-    // This will enter DA mode. Seccfg unlock only works if the device can load extensions / is vulnerable
-    device.set_seccfg_lock_state(LockFlag::Unlock).await
+
+    // This will automatically enter DA mode. Seccfg unlock only works if the device can load extensions / is vulnerable
+    device.set_seccfg_lock_state(LockFlag::Unlock)?;
 
     // Ignore progress for now
-    let mut progress = |_read: usize, _total: usize| {};
+    let mut progress = |read: u64, total: u64| {
+        println!("Progress: {}/{}", read, total);
+    };
 
-    let file = File::create("lk_a.bin").await?;
+    let file = File::create("lk_a.bin")?;
     let mut writer = BufWriter::new(file);
 
-    let mut lk_a_data = device.read_partition("lk_a", &mut progress, &mut writer).await;
-    
-    writer.flush().await?;
-    
+    device.read_partition("lk_a", &mut progress, &mut writer)?;
+
+    writer.flush()?;
+
     Ok(())
 }
 ```
@@ -79,9 +76,12 @@ Penumbra is still in early development, thus it can break quite easily.
 If so, you can open an issue attaching debug logs.<br>
 To get debug logs, run `antumbra` with the `-v` flag. A file called `antumbra.log` will be created in the current directory.
 This will also enable UART debug logging. If possible, attach UART logs too.
+If you don't have UART, you can use the `--usb-log` flag in `antumbra` to enable DA logging over USB.
 
 > [!NOTE]
 > Penumbra currently supports both V5 (XFlash) and V6 (XML) devices. Issues reporting incompatibility with other chipset will be ignored until broader support is added.
+> If your device falls in one of these categories and you get the "unknown hardware code" warning, please open an issue attaching your device info, and relevant firmware
+> files (preloader, DA, lk).
 
 ## Contributing
 
@@ -89,30 +89,27 @@ For contributing, you'll first need to setup a development environment.
 
 Read on how to setup a dev environment and how to get started [here](CONTRIBUTING.md)
 
+For contributing to the payloads, head to the [payloads repository](https://github.com/shomykohai/mtk-payloads).
+
 ### Current Roadmap
 
 Core:
-* [x] Add UFS support
-* [x] Dynamically determine SEJ base (for more chipsets support)
-* [x] Build DA extensions from source
-* [x] Limit extensions only commands when exts are not added to avoid timeouts
-* [x] Add a way to restore state
-* [x] Clean up duplicated code
-* [x] Add support for BROM mode (and setup DRAM)
-* [x] Add support for DA SLA and preloader auth
-* [x] Add target config to Device Info (SBC, DAA and SLA)
-* [x] Improve support for preloader/brom only connection (for testing purposes with just preloader commands)
-* [x] Improve DA parsing and add DA patching
+* [ ] Add V3 support
+* [ ] Add amonet exploit
 
 TUI:
-* [x] Add partition read and write (Add partition list next to the action list)
-* [x] Make code reusable (add components like a custom FileExplorer, selectable list...)
-* [x] Change logo with an animated waning crescent moon with blinking stars around
-* [x] Add a switch on the welcome screen to enable or disable logging (with selection for log level)
+* [ ] Refactor the TUI code to be more maintainable
+* [ ] Add reusable components
+* [ ] Make better key bindings
+
+CLI:
+* [ ] Add plstage
+* [ ] Add Read Offset, Write Offset and Erase Offset commands
+* [ ] Add register read/write commands
 
 Documentation:
-* [x] Document XFlash protocol
-* [x] Improve Carbonara information
+* [ ] Add documentation for the crate
+* [ ] Add linecode exploit documentation
 
 ## Learning Resources
 
@@ -137,8 +134,8 @@ Other learning resources I suggest are the following
 
 Penumbra is licensed under the GNU Affero General Public License v3 or later (AGPL-3.0-or-later), see [LICENSE](LICENSE) for details.
 
-Part of the code in Penumbra is adapted from [mtkclient](https://github.com/bkerler/mtkclient). The code adapted from mtkclient is licensed
-under the GNU Public License v3 or later (GPL-3.0).
+Some limited parts of the code in Penumbra are adapted from [mtkclient](https://github.com/bkerler/mtkclient). 
+The code adapted from mtkclient is licensed under the GNU Public License v3 or later (GPL-3.0).
 
 As for term 13 of the GPL-3.0 license, the GPL-3.0 components must comply the networking terms of the AGPL-3.0 license when used together.
 
