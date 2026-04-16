@@ -5,6 +5,7 @@
 
 use std::sync::{Arc, RwLock};
 
+use crate::core::bootctrl::BootControl;
 use crate::core::chip::{ChipInfo, UNKNOWN_CHIP};
 use crate::core::storage::{Partition, StorageKind};
 
@@ -22,6 +23,7 @@ pub struct DevInfoData {
     pub meid: [u8; 16],
     pub hw_code: u16,
     pub partitions: Vec<Partition>,
+    pub bootctrl: Option<BootControl>,
     pub target_config: u32,
 }
 
@@ -83,17 +85,36 @@ impl DeviceInfo {
     }
 
     pub fn get_partition(&self, name: &str) -> Option<Partition> {
-        self.data
-            .read()
-            .unwrap()
-            .partitions
-            .iter()
-            .find(|p| p.name.eq_ignore_ascii_case(name))
-            .cloned()
+        let data = self.data.read().unwrap();
+
+        if let Some(p) = data.partitions.iter().find(|p| p.name.eq_ignore_ascii_case(name)) {
+            return Some(p.clone());
+        }
+
+        log::info!("Partition '{}' not found, trying with bootctrl suffix", name);
+
+        let Some(suffix) = self.get_bootctrl()?.get_current_suffix().map(|s| s.to_string()) else {
+            log::error!("BOOTCTRL OR SUFFIX IS NONE");
+            return None;
+        };
+
+        let suffixed_name = format!("{name}{suffix}");
+
+        log::info!("Trying to find partition with suffixed name '{}'", suffixed_name);
+
+        data.partitions.iter().find(|p| p.name.eq_ignore_ascii_case(&suffixed_name)).cloned()
     }
 
     pub fn set_partitions(&self, partitions: Vec<Partition>) {
         self.data.write().unwrap().partitions = partitions;
+    }
+
+    pub fn get_bootctrl(&self) -> Option<BootControl> {
+        self.data.read().unwrap().bootctrl.clone()
+    }
+
+    pub fn set_bootctrl(&self, bctrl: BootControl) {
+        self.data.write().unwrap().bootctrl = Some(bctrl)
     }
 
     pub fn target_config(&self) -> u32 {

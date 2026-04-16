@@ -9,6 +9,7 @@ use log::{error, info, warn};
 
 use crate::connection::Connection;
 use crate::connection::port::{ConnectionType, MTKPort};
+use crate::core::bootctrl::{BootControl, OFFSET_SLOT_SUFFIX};
 use crate::core::chip::{ChipInfo, chip_from_hw_code};
 use crate::core::crypto::config::CryptoIO;
 use crate::core::devinfo::{DevInfoData, DeviceInfo};
@@ -195,7 +196,14 @@ impl Device {
         let hw_code = conn.get_hw_code()?;
         let target_config = conn.get_target_config()?;
 
-        let device_info = DevInfoData { soc_id, meid, hw_code, partitions: vec![], target_config };
+        let device_info = DevInfoData {
+            soc_id,
+            meid,
+            hw_code,
+            partitions: vec![],
+            target_config,
+            bootctrl: None,
+        };
 
         self.dev_info.set_data(device_info);
         let chip = chip_from_hw_code(hw_code);
@@ -288,6 +296,9 @@ impl Device {
 
         // Fallback to ensure we always have the partitions available.
         self.get_partitions();
+        // Bootctrl may fail, but we don't really care since
+        // not all devices support it.
+        self.get_bootctrl().ok();
         Ok(())
     }
 
@@ -338,6 +349,7 @@ impl Device {
         };
 
         self.get_partitions();
+        self.get_bootctrl().ok();
         Ok(protocol)
     }
 
@@ -417,10 +429,38 @@ impl Device {
         partitions
     }
 
+    pub fn get_bootctrl(&mut self) -> Result<BootControl> {
+        if let Some(cached) = self.dev_info.get_bootctrl() {
+            return Ok(cached);
+        }
+
+        let mut buffer = Vec::new();
+        for part in ["misc", "para"] {
+            buffer.clear();
+
+            if self.upload(part, &mut buffer, |_, _| {}).is_err() {
+                continue;
+            }
+
+            // Bootctrl is 0x20 bytes
+            if buffer.len() < OFFSET_SLOT_SUFFIX + 0x20 {
+                continue;
+            }
+
+            if let Some(mut bootctrl) = BootControl::parse(&buffer[OFFSET_SLOT_SUFFIX..]) {
+                bootctrl.bctrl_part = part.into();
+                self.dev_info.set_bootctrl(bootctrl.clone());
+                return Ok(bootctrl);
+            }
+        }
+
+        Err(Error::penumbra("Failed to read BootControl, device might not support A/B slots."))
+    }
+
     /// Reads data from a specified partition on the device.
     /// This function assumes the partition to be part of the user section.
     /// To read from other sections, use `read_offset` with appropriate address.
-    pub fn read_partition<W, F>(&mut self, name: &str, progress: F, writer: W) -> Result<()>
+    pub fn read_partition<W, F>(&mut self, name: &str, writer: W, progress: F) -> Result<()>
     where
         W: Write + Send,
         F: FnMut(usize, usize) + Send,
