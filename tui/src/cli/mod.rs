@@ -59,6 +59,8 @@ cli_commands! {
         Format(FormatArgs),
         WriteFlash(WriteArgs),
         ReadFlash(ReadArgs),
+        WriteOffset(WriteOffArgs),
+        ReadOffset(ReadOffArgs),
         Erase(EraseArgs),
         ReadAll(ReadAllArgs),
         Seccfg(SeccfgArgs),
