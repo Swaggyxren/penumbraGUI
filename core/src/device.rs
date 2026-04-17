@@ -435,8 +435,18 @@ impl Device {
             return Ok(cached);
         }
 
+        let parts = self.get_partitions();
+        let target_parts: Vec<&str> = ["misc", "para"]
+            .iter()
+            .filter_map(|&name| parts.iter().find(|p| p.name == name).map(|p| p.name.as_str()))
+            .collect();
+
+        if target_parts.is_empty() {
+            return Err(Error::penumbra("Neither 'misc' nor 'para' partition found."));
+        }
+
         let mut buffer = Vec::new();
-        for part in ["misc", "para"] {
+        for part in target_parts {
             buffer.clear();
 
             if self.upload(part, &mut buffer, |_, _| {}).is_err() {
