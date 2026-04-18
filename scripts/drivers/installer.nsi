@@ -5,6 +5,7 @@
 !define PRODUCT_NAME "Penumbra drivers installer"
 !define PRODUCT_DESCRIPTION "Installs USB drivers for various devices, for use with Penumbra."
 !define PRODUCT_VERSION "1.0.0.0"
+!define MUI_ICON "icon.ico"
 
 Name "${PRODUCT_NAME}"
 OutFile "PenumbraDrivers.exe"
