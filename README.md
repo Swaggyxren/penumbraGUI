@@ -12,9 +12,28 @@ It provides flashing and readback capabilities, as well as bootloader unlocking 
 
 ## Usage
 
-Penumbra can be used both as a crate for interacting directly with a device with your own code, as well as providing a CLI and (preliminary) [TUI](tui).
+Penumbra can be used both as a crate for interacting directly with a device with your own code, as well as providing a CLI, (preliminary) [TUI](tui), and [GUI](gui).
 
 For using the CLI, [read the documentation with all commands here](https://penumbra.itssho.my/Penumbra/Antumbra/CLI)
+
+### Graphical UI (`penumbra-gui`)
+
+A native desktop app that wraps the Penumbra core library is available in the [`gui/`](gui) crate. It is inspired by community flash-tool GUIs and provides:
+
+* **PGPT Manager** — load the device's partition table, select partitions, and read them into a chosen backup folder with live progress
+* **Auto-assign + Write Assigned** — map image files to partitions by name and flash them in one go
+* **Bootloader** — seccfg unlock / lock with explicit confirmation dialogs
+* **Operations** — reboot (Normal / Fastboot) and shutdown
+* **Execution Log** — live log viewer with level filter, autoscroll, copy/save
+* **Theming** — Dark Purple (default), Dark Blue, Dark Teal, and Light themes
+
+Build and run the GUI with:
+
+```sh
+cargo run -p penumbra-gui --release
+```
+
+On Windows the binary is produced at `target/release/penumbra-gui.exe` — no console window is spawned.
 
 For using the crate, use the device API:
 
