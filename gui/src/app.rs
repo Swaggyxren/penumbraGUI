@@ -388,6 +388,35 @@ impl eframe::App for App {
 // Drawing helpers
 // -------------------------------------------------------------------
 
+fn timestamp_stamp() -> String {
+    // UNIX seconds formatted as `YYYYMMDD-HHMMSS` (UTC). Pure std; avoids
+    // pulling in another dependency just for folder names.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    // Days since 1970-01-01, then civil-date from days (Hinnant's algorithm).
+    let days = now.div_euclid(86_400);
+    let secs_of_day = now.rem_euclid(86_400);
+    let hour = secs_of_day / 3600;
+    let minute = (secs_of_day / 60) % 60;
+    let second = secs_of_day % 60;
+
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if m <= 2 { y + 1 } else { y };
+
+    format!("{year:04}{m:02}{d:02}-{hour:02}{minute:02}{second:02}")
+}
+
 fn panel_frame(fill: Color32, border: Color32, radius: f32) -> egui::Frame {
     egui::Frame::none()
         .fill(fill)
@@ -953,8 +982,13 @@ impl App {
             log::warn!("No NVRAM/EFS/NVCFG-style partitions found in this PGPT.");
             return;
         }
-        log::info!("Smart Backup: {} partitions → {}", names.len(), out.display());
-        self.send(Command::ReadPartitions { names, output_dir: out });
+        let dir = out.join(format!("smart-backup-{}", timestamp_stamp()));
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            log::error!("Failed to create Smart Backup folder {}: {e}", dir.display());
+            return;
+        }
+        log::info!("Smart Backup: {} partitions → {}", names.len(), dir.display());
+        self.send(Command::ReadPartitions { names, output_dir: dir });
     }
 
     fn auto_assign_images(&mut self) {
@@ -1106,6 +1140,7 @@ impl App {
                     scroll = scroll.stick_to_bottom(true);
                 }
                 scroll.show(ui, |ui| {
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                     for line in &self.logs {
                         if !self.log_filter.matches(line.level) {
                             continue;
@@ -1116,12 +1151,13 @@ impl App {
                             log::Level::Info => palette.text,
                             log::Level::Debug | log::Level::Trace => palette.text_muted,
                         };
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                RichText::new(format!("[{}]", line.level)).color(color).monospace(),
-                            );
-                            ui.label(RichText::new(&line.message).color(color).monospace());
-                        });
+                        let text = format!("[{}] {}", line.level, line.message);
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(text).color(color).monospace(),
+                            )
+                            .wrap(),
+                        );
                     }
                 });
             });
