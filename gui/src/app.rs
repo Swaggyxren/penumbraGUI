@@ -71,6 +71,7 @@ struct Persisted {
     preloader_path: Option<PathBuf>,
     auth_path: Option<PathBuf>,
     output_dir: Option<PathBuf>,
+    log_panel_width: f32,
 }
 
 impl Default for Persisted {
@@ -82,6 +83,7 @@ impl Default for Persisted {
             preloader_path: None,
             auth_path: None,
             output_dir: None,
+            log_panel_width: 420.0,
         }
     }
 }
@@ -354,12 +356,16 @@ impl eframe::App for App {
                 .show(ctx, |ui| self.draw_progress_bar(ui));
         }
 
-        egui::SidePanel::right("execution_log")
+        let log_panel = egui::SidePanel::right("execution_log")
             .resizable(true)
-            .default_width(420.0)
-            .min_width(300.0)
+            .default_width(self.persisted.log_panel_width)
+            .width_range(180.0..=900.0)
             .frame(panel_frame(palette.panel, palette.border, 0.0))
             .show(ctx, |ui| self.draw_exec_log(ui, palette));
+        let new_log_width = log_panel.response.rect.width();
+        if (new_log_width - self.persisted.log_panel_width).abs() > 0.5 {
+            self.persisted.log_panel_width = new_log_width;
+        }
 
         egui::CentralPanel::default()
             .frame(panel_frame(palette.background, palette.border, 0.0))
