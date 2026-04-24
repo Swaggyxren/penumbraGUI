@@ -531,7 +531,7 @@ fn build_scatter_row(entry: &crate::scatter::ScatterEntry, root: &std::path::Pat
         return ScatterRow {
             included: false,
             resolved: None,
-            skip_reason: Some("not is_download"),
+            skip_reason: Some("excluded by scatter"),
         };
     }
     if entry.file_name.is_empty() || entry.file_name.eq_ignore_ascii_case("NONE") {
