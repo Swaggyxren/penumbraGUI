@@ -14,6 +14,7 @@
 mod app;
 mod log_bridge;
 mod messages;
+mod scatter;
 mod theme;
 mod worker;
 
