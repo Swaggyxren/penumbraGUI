@@ -697,7 +697,14 @@ impl App {
         });
 
         ui.add_space(4.0);
-        self.draw_partition_table(ui, palette);
+
+        // Reserve room for the two action-button rows below the table so
+        // nothing gets clipped when the central pane is short.
+        const ACTION_ROWS_HEIGHT: f32 = 120.0;
+        let table_height = (ui.available_height() - ACTION_ROWS_HEIGHT).max(160.0);
+        ui.allocate_ui(egui::vec2(ui.available_width(), table_height), |ui| {
+            self.draw_partition_table(ui, palette);
+        });
         ui.add_space(8.0);
 
         ui.horizontal(|ui| {
@@ -770,14 +777,16 @@ impl App {
     }
 
     fn draw_partition_table(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
-        let avail = ui.available_height() - 90.0;
+        // Fills whatever height the parent `allocate_ui` gave us. The frame's
+        // inner_margin eats 12 px of vertical space; leave a little headroom.
+        let inner_min_height = (ui.available_height() - 12.0).max(160.0);
         Frame::none()
             .fill(palette.panel)
             .stroke(Stroke::new(1.0_f32, palette.border))
             .rounding(Rounding::same(6.0))
             .inner_margin(Margin::same(6.0))
             .show(ui, |ui| {
-                ui.set_min_height(avail.max(160.0));
+                ui.set_min_height(inner_min_height);
                 if self.partitions.is_empty() {
                     ui.centered_and_justified(|ui| {
                         ui.label(
