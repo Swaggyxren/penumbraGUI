@@ -416,7 +416,6 @@ impl App {
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Theme:").color(palette.text_muted));
                     egui::ComboBox::from_id_salt("theme_combo")
                         .selected_text(self.persisted.theme.label())
                         .show_ui(ui, |ui| {
@@ -424,6 +423,7 @@ impl App {
                                 ui.selectable_value(&mut self.persisted.theme, t, t.label());
                             }
                         });
+                    ui.label(RichText::new("Theme:").color(palette.text_muted));
                 });
                 ui.add_space(12.0);
                 self.draw_status_pill(ui, palette);
