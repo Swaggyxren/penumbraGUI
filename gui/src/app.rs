@@ -54,7 +54,7 @@ impl Tab {
 
     fn icon(self) -> &'static str {
         match self {
-            Tab::Pgpt => "🗂",
+            Tab::Pgpt => "📁",
             Tab::Scatter => "📄",
             Tab::Operations => "⚙",
         }
@@ -184,16 +184,11 @@ impl ConfirmAction {
             ConfirmAction::UnlockBootloader => {
                 "You are about to clear the seccfg partition via DA extensions.\n\n\
                  READ THIS BEFORE PROCEEDING:\n\n\
-                 - Only works on vulnerable / unfused devices. On fused devices it will fail \
-                   or brick.\n\
                  - Unlocking will WIPE userdata on the next boot. Back up anything you care \
                    about first.\n\
                  - After unlocking, the device boots with a tamper warning until re-locked.\n\
-                 - The safest moment to unlock is with STOCK, UNMODIFIED firmware flashed \
-                   (boot, vbmeta, super, recovery).\n\n\
-                 If you are currently on a port ROM, custom ROM, or modified boot/vbmeta, \
-                 go back to unmodified stock firmware FIRST, then unlock. Otherwise you risk \
-                 a hard brick on the next boot.\n\n\
+                 - Make sure the battery is sufficiently charged and the USB cable is \
+                   reliable; an interrupted seccfg write can leave the device unbootable.\n\n\
                  Do you want to continue?"
                     .into()
             }
