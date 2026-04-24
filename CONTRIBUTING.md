@@ -1,6 +1,6 @@
 # Contributing to Penumbra
 
-This document outlines the guidelines and best practices for contributing to Penumbra (core library) and Antumbra (TUI).
+This document outlines the guidelines and best practices for contributing to Penumbra (core library), Antumbra (TUI), and `penumbra-gui` (desktop GUI).
 This document assumes familiarity with Git, GitHub, and Rust.
 
 First off, thank you for considering contributing to Penumbra, whether it's through code, documentation, or reporting issues.
@@ -33,7 +33,7 @@ Harassment, discrimination, or any form of disrespectful behavior will not be to
 ## What to expect
 
 All contributions are welcome, but make sure to follow the guidelines below:
-- PRs should be focused and address a single issue or feature, and should not go outside its scope (core, tui, docs)
+- PRs should be focused and address a single issue or feature, and should not go outside its scope (core, tui, gui, docs)
 - All contributions will be reviewed, and feedback may be provided.
 - Requests for changes may be made before merging, especially if the contribution doesn't follow the [style guide] or has other issues.
 - Documentation changes are encouraged, especially if they improve clarity or add missing information, or fix typos.
@@ -84,19 +84,25 @@ Additionally, install the following dependencies:
 * pkg-config
 * systemd-dev
 
-### Building Penumbra and Antumbra
+### Building Penumbra, Antumbra, and penumbra-gui
 
-To build Penumbra and Antumbra, navigate to the project directory and run:
+To build the whole workspace, navigate to the project directory and run:
 
 ```bash
 cargo build
 ```
 
-This will compile both the core library and the TUI.
-To run Antumbra, use:
+This will compile the core library, the TUI (`antumbra`), and the GUI (`penumbra-gui`).
+To run Antumbra (TUI / CLI), use:
 
 ```bash
-cargo run
+cargo run -p antumbra
+```
+
+To run the GUI, use:
+
+```bash
+cargo run -p penumbra-gui
 ```
 
 ## Issues
@@ -138,6 +144,7 @@ Commits should follow this conventional commit style:
 
 Where `<domain>` is one of:
 - `tui`: Changes related to the Antumbra TUI
+- `gui`: Changes related to the `penumbra-gui` desktop GUI
 - `core`: Changes related to the Penumbra core library
 - `docs`: Changes related to documentation
 - `scripts`: Changes related to scripts used for development or testing
