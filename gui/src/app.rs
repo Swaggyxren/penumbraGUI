@@ -128,6 +128,7 @@ pub struct App {
 
     // Confirm-dialog state.
     confirm: Option<ConfirmAction>,
+    confirm_opened_at: Option<std::time::Instant>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,12 +182,37 @@ impl ConfirmAction {
     fn body(&self) -> String {
         match self {
             ConfirmAction::UnlockBootloader => {
-                "This will clear seccfg via DA extensions. Requires a vulnerable / \
-                 unfused device. Continue?"
+                "You are about to clear the seccfg partition via DA extensions.\n\n\
+                 READ THIS BEFORE PROCEEDING:\n\n\
+                 - Only works on vulnerable / unfused devices. On fused devices it will fail \
+                   or brick.\n\
+                 - Unlocking will WIPE userdata on the next boot. Back up anything you care \
+                   about first.\n\
+                 - After unlocking, the device boots with a tamper warning until re-locked.\n\
+                 - The safest moment to unlock is with STOCK, UNMODIFIED firmware flashed \
+                   (boot, vbmeta, super, recovery).\n\n\
+                 If you are currently on a port ROM, custom ROM, or modified boot/vbmeta, \
+                 go back to unmodified stock firmware FIRST, then unlock. Otherwise you risk \
+                 a hard brick on the next boot.\n\n\
+                 Do you want to continue?"
                     .into()
             }
             ConfirmAction::LockBootloader => {
-                "This will re-lock seccfg via DA extensions. Continue?".into()
+                "You are about to RE-LOCK the bootloader by restoring seccfg.\n\n\
+                 READ THIS BEFORE PROCEEDING:\n\n\
+                 - Locking while the device is running a port ROM, custom ROM, or any \
+                   modified image (boot, vbmeta, super, recovery, dtbo) is the #1 way to \
+                   HARD-BRICK a MediaTek phone.\n\
+                 - Lock ONLY after you have flashed full, unmodified STOCK firmware for \
+                   your exact model and region. If you are not 100% sure every partition \
+                   is stock, do NOT lock.\n\
+                 - Relocking will usually wipe userdata on the next boot.\n\
+                 - There is no guaranteed recovery path if the device refuses to boot \
+                   after locking on a modified image.\n\n\
+                 Flash unmodified stock firmware first, verify the device boots cleanly, \
+                 THEN come back and lock.\n\n\
+                 Do you want to continue?"
+                    .into()
             }
             ConfirmAction::WriteAssigned(list) => {
                 let mut s = String::from("The following partitions will be OVERWRITTEN:\n\n");
@@ -231,6 +257,7 @@ impl App {
             evt_rx,
             log_rx,
             confirm: None,
+            confirm_opened_at: None,
         }
     }
 
@@ -417,6 +444,12 @@ fn timestamp_stamp() -> String {
     format!("{year:04}{m:02}{d:02}-{hour:02}{minute:02}{second:02}")
 }
 
+fn status_dot(ui: &mut egui::Ui, color: Color32) {
+    // Paint the status circle directly so it doesn't depend on a font glyph.
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+    ui.painter().circle_filled(rect.center(), 4.0, color);
+}
+
 fn panel_frame(fill: Color32, border: Color32, radius: f32) -> egui::Frame {
     egui::Frame::none()
         .fill(fill)
@@ -480,7 +513,7 @@ impl App {
             .rounding(Rounding::same(6.0))
             .inner_margin(Margin::symmetric(10.0, 4.0))
             .show(ui, |ui| {
-                ui.label(RichText::new("●").color(color));
+                status_dot(ui, color);
                 ui.label(RichText::new(label).color(palette.text));
             });
     }
@@ -643,10 +676,11 @@ impl App {
         let palette = self.persisted.theme.palette();
         ui.horizontal(|ui| {
             let (label, color) = match &self.status {
-                ConnStatus::Disconnected => ("● System Ready", palette.success),
-                ConnStatus::Connecting => ("● Connecting...", palette.warn),
-                ConnStatus::Connected { .. } => ("● Device Connected", palette.success),
+                ConnStatus::Disconnected => ("System Ready", palette.success),
+                ConnStatus::Connecting => ("Connecting...", palette.warn),
+                ConnStatus::Connected { .. } => ("Device Connected", palette.success),
             };
+            status_dot(ui, color);
             ui.label(RichText::new(label).color(color).strong());
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -787,7 +821,7 @@ impl App {
             .fill(palette.accent_strong)
             .min_size(egui::vec2(260.0, 32.0));
             if ui.add_enabled(write_enabled, write_btn).clicked() {
-                self.confirm = Some(ConfirmAction::WriteAssigned(assignments));
+                self.open_confirm(ConfirmAction::WriteAssigned(assignments));
             }
 
             ui.add_space(6.0);
@@ -1037,7 +1071,7 @@ impl App {
             .fill(palette.accent)
             .min_size(egui::vec2(220.0, 36.0));
             if ui.add_enabled(enabled, unlock).clicked() {
-                self.confirm = Some(ConfirmAction::UnlockBootloader);
+                self.open_confirm(ConfirmAction::UnlockBootloader);
             }
             let lock = egui::Button::new(
                 RichText::new("🔒 LOCK BOOTLOADER").color(Color32::WHITE).strong(),
@@ -1045,7 +1079,7 @@ impl App {
             .fill(palette.warn)
             .min_size(egui::vec2(220.0, 36.0));
             if ui.add_enabled(enabled, lock).clicked() {
-                self.confirm = Some(ConfirmAction::LockBootloader);
+                self.open_confirm(ConfirmAction::LockBootloader);
             }
         });
 
@@ -1055,19 +1089,19 @@ impl App {
         ui.horizontal(|ui| {
             let normal = egui::Button::new("↻ Reboot (Normal)").min_size(egui::vec2(200.0, 32.0));
             if ui.add_enabled(enabled, normal).clicked() {
-                self.confirm = Some(ConfirmAction::Reboot(BootMode::Normal));
+                self.open_confirm(ConfirmAction::Reboot(BootMode::Normal));
             }
             let fastboot =
                 egui::Button::new("⚡ Reboot Fastboot").min_size(egui::vec2(200.0, 32.0));
             if ui.add_enabled(enabled, fastboot).clicked() {
-                self.confirm = Some(ConfirmAction::Reboot(BootMode::Fastboot));
+                self.open_confirm(ConfirmAction::Reboot(BootMode::Fastboot));
             }
             let shutdown_btn =
                 egui::Button::new(RichText::new("⏻ Shut Down").color(Color32::WHITE))
                     .fill(palette.error)
                     .min_size(egui::vec2(160.0, 32.0));
             if ui.add_enabled(enabled, shutdown_btn).clicked() {
-                self.confirm = Some(ConfirmAction::Shutdown);
+                self.open_confirm(ConfirmAction::Shutdown);
             }
         });
 
@@ -1213,6 +1247,27 @@ impl App {
         let mut close = false;
         let mut accept = false;
 
+        // Bootloader lock/unlock get a mandatory 15 s read-the-warning delay
+        // before the Proceed button becomes clickable.
+        const BOOTLOADER_DELAY_SECS: f32 = 15.0;
+        let delayed = matches!(
+            action,
+            ConfirmAction::UnlockBootloader | ConfirmAction::LockBootloader
+        );
+        let remaining = if delayed {
+            let elapsed = self
+                .confirm_opened_at
+                .map(|t| t.elapsed().as_secs_f32())
+                .unwrap_or(0.0);
+            (BOOTLOADER_DELAY_SECS - elapsed).max(0.0)
+        } else {
+            0.0
+        };
+        let proceed_enabled = !delayed || remaining <= 0.0;
+        if delayed && remaining > 0.0 {
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
+        }
+
         egui::Window::new(RichText::new(action.title()).strong().color(palette.text))
             .collapsible(false)
             .resizable(false)
@@ -1225,7 +1280,11 @@ impl App {
                     .inner_margin(Margin::same(16.0)),
             )
             .show(ctx, |ui| {
-                ui.set_min_width(420.0);
+                ui.set_min_width(if delayed { 520.0 } else { 420.0 });
+                ui.set_max_width(if delayed { 520.0 } else { 420.0 });
+                if delayed {
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                }
                 ui.label(RichText::new(action.body()).color(palette.text));
                 ui.add_space(12.0);
                 ui.horizontal(|ui| {
@@ -1236,16 +1295,17 @@ impl App {
                         close = true;
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    RichText::new("Confirm").color(Color32::WHITE).strong(),
-                                )
-                                .fill(palette.error)
-                                .min_size(egui::vec2(120.0, 28.0)),
-                            )
-                            .clicked()
-                        {
+                        let btn_text = if delayed && remaining > 0.0 {
+                            format!("Proceed in {}s", remaining.ceil() as u32)
+                        } else {
+                            "Proceed".to_string()
+                        };
+                        let btn = egui::Button::new(
+                            RichText::new(btn_text).color(Color32::WHITE).strong(),
+                        )
+                        .fill(palette.error)
+                        .min_size(egui::vec2(160.0, 28.0));
+                        if ui.add_enabled(proceed_enabled, btn).clicked() {
                             accept = true;
                         }
                     });
@@ -1266,7 +1326,13 @@ impl App {
         }
         if close {
             self.confirm = None;
+            self.confirm_opened_at = None;
         }
+    }
+
+    fn open_confirm(&mut self, action: ConfirmAction) {
+        self.confirm = Some(action);
+        self.confirm_opened_at = Some(std::time::Instant::now());
     }
 }
 
