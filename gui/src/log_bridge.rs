@@ -25,9 +25,47 @@ pub struct ChannelLogger {
     per_target: HashMap<String, LevelFilter>,
 }
 
+/// Crates whose Info/Debug records the user does not want to see in the
+/// execution log under normal operation. zbus / ashpd are particularly
+/// chatty on Linux because egui's native file picker goes through
+/// xdg-desktop-portal. winit / wgpu / eframe surface routine framework
+/// chatter that has nothing to do with the device.
+///
+/// Errors and warnings still pass through. The user can override any of
+/// these by setting RUST_LOG (e.g. `RUST_LOG=zbus=debug`); RUST_LOG
+/// rules are parsed first, and the defaults below are only filled in
+/// for targets the user did not already set explicitly.
+const QUIET_TARGETS: &[&str] = &[
+    "zbus",
+    "zvariant",
+    "ashpd",
+    "polling",
+    "async_io",
+    "tracing",
+    "winit",
+    "calloop",
+    "sctk",
+    "smithay_client_toolkit",
+    "mio",
+    "naga",
+    "wgpu_core",
+    "wgpu_hal",
+    "eframe",
+    "egui_winit",
+    "egui_glow",
+];
+
 impl ChannelLogger {
     fn new(sender: Sender<LogLine>, verbose: bool) -> Self {
-        let (default, per_target) = parse_filter(&std::env::var("RUST_LOG").ok(), verbose);
+        let (default, mut per_target) =
+            parse_filter(&std::env::var("RUST_LOG").ok(), verbose);
+
+        // Quiet noisy framework crates by default, but only if the user
+        // hasn't already opted them in via RUST_LOG.
+        for tgt in QUIET_TARGETS {
+            per_target.entry((*tgt).to_string()).or_insert(LevelFilter::Warn);
+        }
+
         Self { sender: Mutex::new(sender), default, per_target }
     }
 
