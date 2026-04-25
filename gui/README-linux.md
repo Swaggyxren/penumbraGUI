@@ -7,9 +7,12 @@ users can open the MediaTek BROM / Preloader / DA endpoints.
 
 ## Arch Linux (recommended)
 
-A `PKGBUILD` is shipped under [`packaging/arch`](../packaging/arch).
+Two PKGBUILDs are shipped — pick one.
 
-### From the repo
+### Source build (`penumbra-gui`)
+
+Builds the GUI locally with `cargo`. Requires `rust` + `cargo` (~3 min
+build). Stays in sync with whatever tag the PKGBUILD points to.
 
 ```
 git clone https://github.com/Swaggyxren/penumbraGUI.git
@@ -17,19 +20,33 @@ cd penumbraGUI/packaging/arch
 makepkg -si
 ```
 
-`makepkg -si` builds `penumbra-gui` from the v1.1.0-gui tag, installs the
-binary at `/usr/bin/penumbra-gui`, drops the `.desktop` entry and icons
-into `hicolor`, and installs the udev rules at
-`/usr/lib/udev/rules.d/51-mtk-penumbra.rules`.
+### Prebuilt binary (`penumbra-gui-bin`)
+
+Downloads the `penumbra-gui-linux-x86_64.tar.gz` already attached to the
+[GitHub Release](https://github.com/Swaggyxren/penumbraGUI/releases/tag/v1.1.0-gui)
+and installs it directly. No Rust toolchain needed (~5 s install).
+Conflicts with `penumbra-gui` because they own the same paths.
+
+```
+git clone https://github.com/Swaggyxren/penumbraGUI.git
+cd penumbraGUI/packaging/arch-bin
+makepkg -si
+```
 
 ### From the AUR
 
-Once published the package will be `penumbra-gui` (not yet on AUR — check
-the upstream repo for status).
+Once published the packages will be `penumbra-gui` (source) and
+`penumbra-gui-bin` (binary). Until then use the in-tree PKGBUILDs above.
 
 ```
-yay -S penumbra-gui
+yay -S penumbra-gui-bin    # or penumbra-gui
 ```
+
+Both packages install to the same paths:
+
+- binary at `/usr/bin/penumbra-gui`,
+- `.desktop` + icons under `/usr/share/`,
+- udev rules at `/usr/lib/udev/rules.d/51-mtk-penumbra.rules`.
 
 ### Activating the udev rules
 
