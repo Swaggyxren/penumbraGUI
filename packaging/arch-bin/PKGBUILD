@@ -23,6 +23,13 @@ license=('AGPL-3.0-or-later')
 depends=(
     'gcc-libs'
     'glibc'
+    # libusb is statically vendored into the v1.1.0-gui tarball
+    # (libusb1-sys's vendored build kicks in when no system libusb is
+    # detected at compile time), so this dep is technically not needed
+    # by the current artifact. Listed anyway for consistency with the
+    # source PKGBUILD and so future tarballs that happen to link
+    # dynamically don't break end users.
+    'libusb'
     'systemd-libs'
     'fontconfig'
     'freetype2'
