@@ -309,6 +309,7 @@ impl App {
             cc.storage.and_then(|s| eframe::get_value(s, "penumbra-gui")).unwrap_or_default();
 
         theme::apply(persisted.theme.palette(), &cc.egui_ctx);
+        install_fonts(&cc.egui_ctx);
 
         // If the user had a scatter file open last session, try to re-parse it.
         let scatter = persisted.scatter_path.as_ref().and_then(|p| {
@@ -504,6 +505,23 @@ impl eframe::App for App {
 // -------------------------------------------------------------------
 // Drawing helpers
 // -------------------------------------------------------------------
+
+/// Extend egui's default proportional font fallback with Hack-Regular.
+///
+/// egui ships four fonts (Ubuntu-Light, NotoEmoji, emoji-icon-font, Hack)
+/// but by default only the first three are in the proportional fallback
+/// chain. Several glyphs we use in the UI (e.g. ←, ●, ○, geometric/arrow
+/// blocks) are only present in Hack, so without this fallback they
+/// render as tofu boxes inside RichText labels and dialog bodies.
+fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    if let Some(prop) = fonts.families.get_mut(&egui::FontFamily::Proportional)
+        && !prop.iter().any(|n| n == "Hack")
+    {
+        prop.push("Hack".to_owned());
+    }
+    ctx.set_fonts(fonts);
+}
 
 fn timestamp_stamp() -> String {
     // UNIX seconds formatted as `YYYYMMDD-HHMMSS` (UTC). Pure std; avoids
@@ -743,7 +761,7 @@ impl App {
                 let ui_enabled =
                     self.input_enabled && !matches!(self.status, ConnStatus::Connecting);
 
-                let label = if connected { "⏻ Disconnect" } else { "🔌 Connect" };
+                let label = if connected { "Disconnect" } else { "🔌 Connect" };
                 let btn = egui::Button::new(RichText::new(label).color(Color32::WHITE))
                     .fill(if connected { palette.error } else { palette.accent })
                     .stroke(Stroke::new(1.0_f32, palette.border))
@@ -765,7 +783,7 @@ impl App {
                 let preloader_loaded = self.persisted.preloader_path.is_some();
                 let pl_btn = egui::Button::new(
                     RichText::new(if preloader_loaded {
-                        "⚡ Preloader ✓"
+                        "⚡ Preloader ✔"
                     } else {
                         "⚡ Preloader"
                     })
@@ -778,7 +796,7 @@ impl App {
 
                 let auth_loaded = self.persisted.auth_path.is_some();
                 let auth_btn = egui::Button::new(
-                    RichText::new(if auth_loaded { "🔑 Auth ✓" } else { "🔑 Auth" })
+                    RichText::new(if auth_loaded { "🔑 Auth ✔" } else { "🔑 Auth" })
                         .color(palette.text),
                 )
                 .min_size(egui::vec2(100.0, 26.0));
@@ -1189,7 +1207,7 @@ impl App {
                 && ui
                     .add_enabled(
                         self.input_enabled,
-                        egui::Button::new("✕ Clear").min_size(egui::vec2(80.0, 24.0)),
+                        egui::Button::new("✖ Clear").min_size(egui::vec2(80.0, 24.0)),
                     )
                     .clicked()
             {
@@ -1574,7 +1592,7 @@ impl App {
                 self.open_confirm(ConfirmAction::Reboot(BootMode::Fastboot));
             }
             let shutdown_btn =
-                egui::Button::new(RichText::new("⏻ Shut Down").color(Color32::WHITE))
+                egui::Button::new(RichText::new("Shut Down").color(Color32::WHITE))
                     .fill(palette.error)
                     .min_size(egui::vec2(160.0, 32.0));
             if ui.add_enabled(enabled, shutdown_btn).clicked() {
@@ -1672,7 +1690,7 @@ impl App {
 
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            if ui.button("🧹 Clear Log").clicked() {
+            if ui.button("🗑 Clear Log").clicked() {
                 self.logs.clear();
             }
             if ui.button("💾 Save Log").clicked() {
