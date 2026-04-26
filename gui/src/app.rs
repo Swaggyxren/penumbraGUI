@@ -209,6 +209,10 @@ impl ConfirmAction {
             ConfirmAction::UnlockBootloader => {
                 "You are about to clear the seccfg partition via DA extensions.\n\n\
                  READ THIS BEFORE PROCEEDING:\n\n\
+                 - This rewrites seccfg using a DA-side exploit. It only works on \
+                   vulnerable / extension-loadable MediaTek devices. On hardened or \
+                   patched devices the operation will fail and the device should remain \
+                   unchanged — but no result is guaranteed across every chip / firmware.\n\
                  - Unlocking will WIPE userdata on the next boot. Back up anything you care \
                    about first.\n\
                  - After unlocking, the device boots with a tamper warning until re-locked.\n\
@@ -220,6 +224,10 @@ impl ConfirmAction {
             ConfirmAction::LockBootloader => {
                 "You are about to RE-LOCK the bootloader by restoring seccfg.\n\n\
                  READ THIS BEFORE PROCEEDING:\n\n\
+                 - This uses the same DA-side path as unlock and only works on \
+                   vulnerable / extension-loadable MediaTek devices. On some chips / \
+                   firmware revisions the operation will simply fail or behave \
+                   unpredictably — there is no guarantee it will succeed on every device.\n\
                  - Locking while the device is running a port ROM, custom ROM, or any \
                    modified image (boot, vbmeta, super, recovery, dtbo) is the #1 way to \
                    HARD-BRICK a MediaTek phone.\n\
@@ -275,7 +283,16 @@ impl ConfirmAction {
                 s.push_str("\nDo you want to continue?");
                 s
             }
-            ConfirmAction::Reboot(_) => "The device will reboot and disconnect.".into(),
+            ConfirmAction::Reboot(mode) => match mode {
+                BootMode::Fastboot => "The device will be asked to reboot into Android \
+                                       Fastboot and disconnect.\n\n\
+                                       Note: not every MediaTek device exposes a working \
+                                       fastboot mode. If the phone reboots straight back \
+                                       to Android (or stays off), use Reboot (Normal) \
+                                       instead."
+                    .into(),
+                _ => "The device will reboot and disconnect.".into(),
+            },
             ConfirmAction::Shutdown => "The device will power off and disconnect.".into(),
         }
     }
@@ -1547,7 +1564,13 @@ impl App {
             }
             let fastboot =
                 egui::Button::new("⚡ Reboot Fastboot").min_size(egui::vec2(200.0, 32.0));
-            if ui.add_enabled(enabled, fastboot).clicked() {
+            let fastboot_resp = ui.add_enabled(enabled, fastboot).on_hover_text(
+                "Asks the Download Agent to leave DA mode into Android Fastboot.\n\
+                 Many MediaTek consumer devices ship without a working fastboot \
+                 mode — on those phones this just reboots normally or hangs.\n\
+                 If nothing happens, use Reboot (Normal) instead.",
+            );
+            if fastboot_resp.clicked() {
                 self.open_confirm(ConfirmAction::Reboot(BootMode::Fastboot));
             }
             let shutdown_btn =
