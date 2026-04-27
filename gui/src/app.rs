@@ -286,10 +286,7 @@ impl ConfirmAction {
             ConfirmAction::Reboot(mode) => match mode {
                 BootMode::Fastboot => "The device will be asked to reboot into Android \
                                        Fastboot and disconnect.\n\n\
-                                       Note: not every MediaTek device exposes a working \
-                                       fastboot mode. If the phone reboots straight back \
-                                       to Android (or stays off), use Reboot (Normal) \
-                                       instead."
+                                       Note: this might not work on some devices."
                     .into(),
                 _ => "The device will reboot and disconnect.".into(),
             },
@@ -1584,9 +1581,8 @@ impl App {
                 egui::Button::new("⚡ Reboot Fastboot").min_size(egui::vec2(200.0, 32.0));
             let fastboot_resp = ui.add_enabled(enabled, fastboot).on_hover_text(
                 "Asks the Download Agent to leave DA mode into Android Fastboot.\n\
-                 Many MediaTek consumer devices ship without a working fastboot \
-                 mode — on those phones this just reboots normally or hangs.\n\
-                 If nothing happens, use Reboot (Normal) instead.",
+                 Might not work on some devices \u{2014} if nothing happens, use \
+                 Reboot (Normal) instead.",
             );
             if fastboot_resp.clicked() {
                 self.open_confirm(ConfirmAction::Reboot(BootMode::Fastboot));
