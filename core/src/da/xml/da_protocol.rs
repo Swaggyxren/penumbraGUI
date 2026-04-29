@@ -139,13 +139,6 @@ impl DownloadProtocol for Xml {
             mode => {
                 let xml_mode = mode.to_text().unwrap();
                 xmlcmd_e!(self, SetBootMode, xml_mode, "USB", "ON", "ON")?;
-                // SetBootMode on V6 / XML DA only persists the requested
-                // target; it does NOT actually leave DA mode. Without a
-                // follow-up Reboot the device just sits in the DA waiting
-                // for more commands, so the user never sees Fastboot/Meta.
-                xmlcmd_e!(self, Reboot, "IMMEDIATE")
-                    .map(|_| ())
-                    .map_err(|e| Error::proto(format!("Failed to reboot device: {e}")))?;
             }
         }
 
