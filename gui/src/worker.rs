@@ -272,7 +272,13 @@ impl Worker {
             let mut reader = BufReader::new(OpenOptions::new().read(true).open(&path)?);
             let mut callback = Self::make_progress_callback(evt_tx.clone(), "Writing flash");
 
-            match device.write_partition(&part.name, &mut reader, &mut callback) {
+            // Use the WRITE-PARTITION (download) path rather than WRITE-FLASH:
+            // SP Flash Tool flashes firmware files via this command, and on
+            // locked / hardened bootloaders (e.g. Transsion: Tecno / Infinix /
+            // Itel) it is the only write path that survives the on-device
+            // security checks. WRITE-FLASH targets a raw region and the DA
+            // rejects the per-partition handshake before any data flows.
+            match device.download(&part.name, total as usize, &mut reader, &mut callback) {
                 Ok(_) => {
                     let _ = evt_tx.send(Event::ProgressFinish {
                         message: format!("Wrote '{}' OK", part.name),
