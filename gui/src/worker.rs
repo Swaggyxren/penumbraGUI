@@ -366,8 +366,18 @@ impl Worker {
                 return Err(anyhow!("Cancelled by user"));
             }
 
+            // Look up the partition size so the progress bar's `total` matches
+            // the byte counts the DA's format callback emits. Without this,
+            // the bar shows e.g. "4.3 GB / 1 B" because ProgressStart locked
+            // total to 1 but the callback streams real byte counts.
+            let part_size = device
+                .dev_info
+                .get_partition(name)
+                .map(|p| p.size as u64)
+                .unwrap_or(1);
+
             let _ = evt_tx.send(Event::ProgressStart {
-                total_bytes: 1,
+                total_bytes: part_size,
                 message: format!("Erasing {name}"),
             });
 
