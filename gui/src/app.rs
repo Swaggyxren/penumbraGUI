@@ -188,6 +188,7 @@ enum ConfirmAction {
     LockBootloader,
     WriteAssigned(Vec<(String, PathBuf)>),
     FlashScatter(Vec<(String, PathBuf)>),
+    WipeData,
     Reboot(BootMode),
     Shutdown,
 }
@@ -199,6 +200,7 @@ impl ConfirmAction {
             ConfirmAction::LockBootloader => "Lock bootloader?",
             ConfirmAction::WriteAssigned(_) => "Flash assigned images?",
             ConfirmAction::FlashScatter(_) => "Flash scatter layout?",
+            ConfirmAction::WipeData => "Wipe data (factory reset)?",
             ConfirmAction::Reboot(_) => "Reboot device?",
             ConfirmAction::Shutdown => "Shut down device?",
         }
@@ -290,6 +292,30 @@ impl ConfirmAction {
                     .into(),
                 _ => "The device will reboot and disconnect.".into(),
             },
+            ConfirmAction::WipeData => {
+                "You are about to ERASE the device's user data partitions.\n\n\
+                 READ THIS BEFORE PROCEEDING:\n\n\
+                 - This erases `userdata`, `metadata`, and `persist` (whichever \
+                   are present in this device's partition table).\n\
+                 - Every app, every account, every photo, every saved network, \
+                   every fingerprint / face / lock-screen credential, every \
+                   on-device file is gone after this. The device will boot to \
+                   the initial setup wizard, exactly as if you'd selected \
+                   \"Factory Reset\" from the recovery menu.\n\
+                 - This does NOT touch the bootloader, vbmeta, modem, NVRAM, \
+                   IMEI, or any system partition. It is a data wipe, not a \
+                   re-flash.\n\
+                 - Uses the same name-based command path that flashing uses \
+                   (`ErasePartition`), so it should go through on locked / \
+                   hardened bootloaders the same way the flash did. If your DA \
+                   refuses, the toast will tell you exactly which partition \
+                   was rejected.\n\
+                 - Make sure the cable is reliable; an interrupted erase can \
+                   leave userdata in a half-formatted state that the bootloader \
+                   handles by re-formatting on next boot. Annoying, not fatal.\n\n\
+                 Do you want to continue?"
+                    .into()
+            }
             ConfirmAction::Shutdown => "The device will power off and disconnect.".into(),
         }
     }
@@ -1570,6 +1596,25 @@ impl App {
         });
 
         ui.add_space(16.0);
+        ui.label(RichText::new("Storage").color(palette.text_muted).strong());
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let wipe = egui::Button::new(
+                RichText::new("🗑 WIPE DATA (FACTORY RESET)").color(Color32::WHITE).strong(),
+            )
+            .fill(palette.error)
+            .min_size(egui::vec2(280.0, 36.0));
+            let wipe_resp = ui.add_enabled(enabled, wipe).on_hover_text(
+                "Erases userdata / metadata / persist (whichever the device has). \
+                 Wipes apps, accounts, photos, and screen lock. Does not touch the \
+                 bootloader, vbmeta, modem, NVRAM, or IMEI.",
+            );
+            if wipe_resp.clicked() {
+                self.open_confirm(ConfirmAction::WipeData);
+            }
+        });
+
+        ui.add_space(16.0);
         ui.label(RichText::new("Power").color(palette.text_muted).strong());
         ui.add_space(4.0);
         ui.horizontal(|ui| {
@@ -1743,6 +1788,7 @@ impl App {
             ConfirmAction::UnlockBootloader
                 | ConfirmAction::LockBootloader
                 | ConfirmAction::FlashScatter(_)
+                | ConfirmAction::WipeData
         );
         let remaining = if delayed {
             let elapsed = self.confirm_opened_at.map(|t| t.elapsed().as_secs_f32()).unwrap_or(0.0);
@@ -1818,6 +1864,7 @@ impl App {
                 ConfirmAction::FlashScatter(list) => {
                     self.send(Command::WriteAssigned { assignments: list })
                 }
+                ConfirmAction::WipeData => self.send(Command::WipeData),
                 ConfirmAction::Reboot(mode) => self.send(Command::Reboot(mode)),
                 ConfirmAction::Shutdown => self.send(Command::Shutdown),
             }
