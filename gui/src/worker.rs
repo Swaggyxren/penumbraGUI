@@ -344,6 +344,7 @@ impl Worker {
     /// user sees exactly which one the DA refused.
     fn wipe_data(&mut self) -> Result<()> {
         let evt_tx = self.evt_tx.clone();
+        let cancel = self.cancel.clone();
         let device = self.device.as_mut().ok_or_else(|| anyhow!("No device connected"))?;
         device.enter_da_mode().map_err(|e| anyhow!("{}", friendly(&e)))?;
 
@@ -360,6 +361,11 @@ impl Worker {
         info!("Wiping data: {}", present.join(", "));
 
         for name in present {
+            if cancel.swap(false, Ordering::SeqCst) {
+                warn!("Wipe cancelled before '{name}'");
+                return Err(anyhow!("Cancelled by user"));
+            }
+
             let _ = evt_tx.send(Event::ProgressStart {
                 total_bytes: 1,
                 message: format!("Erasing {name}"),
