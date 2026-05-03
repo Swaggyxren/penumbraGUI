@@ -25,6 +25,7 @@ use penumbra::core::seccfg::LockFlag;
 use penumbra::da::protocol::BootMode;
 use penumbra::{Device, DeviceBuilder, find_mtk_port};
 
+use crate::error_format::friendly;
 use crate::messages::{Command, ConnStatus, Event, LockAction};
 
 /// Handle kept by the UI thread for talking to the worker.
@@ -150,8 +151,8 @@ impl Worker {
             builder = builder.with_auth(auth);
         }
 
-        let mut device = builder.build().map_err(|e| anyhow!("{e:?}"))?;
-        device.init().map_err(|e| anyhow!("{e:?}"))?;
+        let mut device = builder.build().map_err(|e| anyhow!("{}", friendly(&e)))?;
+        device.init().map_err(|e| anyhow!("{}", friendly(&e)))?;
 
         let chip = device.chip();
         let chip_name = chip.name().to_string();
@@ -175,7 +176,7 @@ impl Worker {
     fn load_pgpt(&mut self) -> Result<()> {
         let device = self.device.as_mut().ok_or_else(|| anyhow!("No device connected"))?;
         info!("Entering DA mode...");
-        device.enter_da_mode().map_err(|e| anyhow!("{e:?}"))?;
+        device.enter_da_mode().map_err(|e| anyhow!("{}", friendly(&e)))?;
         let partitions = device.get_partitions();
         info!("Loaded {} partitions from the PGPT.", partitions.len());
         self.send(Event::PartitionsLoaded { partitions });
@@ -186,7 +187,7 @@ impl Worker {
         let evt_tx = self.evt_tx.clone();
         let cancel = self.cancel.clone();
         let device = self.device.as_mut().ok_or_else(|| anyhow!("No device connected"))?;
-        device.enter_da_mode().map_err(|e| anyhow!("{e:?}"))?;
+        device.enter_da_mode().map_err(|e| anyhow!("{}", friendly(&e)))?;
         create_dir_all(&output_dir)?;
 
         for name in names {
@@ -231,7 +232,7 @@ impl Worker {
                     let _ = evt_tx.send(Event::ProgressFinish {
                         message: format!("Read '{}' FAILED", part.name),
                     });
-                    return Err(anyhow!("{e:?}"));
+                    return Err(anyhow!("{}", friendly(&e)));
                 }
             }
         }
@@ -243,7 +244,7 @@ impl Worker {
         let evt_tx = self.evt_tx.clone();
         let cancel = self.cancel.clone();
         let device = self.device.as_mut().ok_or_else(|| anyhow!("No device connected"))?;
-        device.enter_da_mode().map_err(|e| anyhow!("{e:?}"))?;
+        device.enter_da_mode().map_err(|e| anyhow!("{}", friendly(&e)))?;
 
         for (name, path) in assignments {
             if cancel.swap(false, Ordering::SeqCst) {
@@ -281,7 +282,7 @@ impl Worker {
                     let _ = evt_tx.send(Event::ProgressFinish {
                         message: format!("Write '{}' FAILED", part.name),
                     });
-                    return Err(anyhow!("{e:?}"));
+                    return Err(anyhow!("{}", friendly(&e)));
                 }
             }
         }
@@ -299,7 +300,7 @@ impl Worker {
 
         let ok = {
             let device = self.device.as_mut().ok_or_else(|| anyhow!("No device connected"))?;
-            device.enter_da_mode().map_err(|e| anyhow!("{e:?}"))?;
+            device.enter_da_mode().map_err(|e| anyhow!("{}", friendly(&e)))?;
             let flag = match action {
                 LockAction::Lock => LockFlag::Lock,
                 LockAction::Unlock => LockFlag::Unlock,
@@ -326,7 +327,7 @@ impl Worker {
     fn reboot(&mut self, mode: BootMode) -> Result<()> {
         let device = self.device.as_mut().ok_or_else(|| anyhow!("No device connected"))?;
         info!("Rebooting (mode={:?})...", mode);
-        device.reboot(mode).map_err(|e| anyhow!("{e:?}"))?;
+        device.reboot(mode).map_err(|e| anyhow!("{}", friendly(&e)))?;
         self.device = None;
         self.set_status(ConnStatus::Disconnected);
         Ok(())
@@ -335,7 +336,7 @@ impl Worker {
     fn shutdown(&mut self) -> Result<()> {
         let device = self.device.as_mut().ok_or_else(|| anyhow!("No device connected"))?;
         info!("Shutting down device...");
-        device.shutdown().map_err(|e| anyhow!("{e:?}"))?;
+        device.shutdown().map_err(|e| anyhow!("{}", friendly(&e)))?;
         self.device = None;
         self.set_status(ConnStatus::Disconnected);
         Ok(())
