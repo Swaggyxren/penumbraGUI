@@ -8,7 +8,7 @@
 //! Handles both the YAML-ish `.txt` variant and the equivalent `.xml` variant
 //! shipped by the same firmware. The parser is intentionally lenient and
 //! stdlib-only — it only extracts the fields the GUI needs to render the
-//! table and call `Device::write_partition`.
+//! table and call `Device::download`.
 
 use std::fs;
 use std::path::Path;
@@ -230,7 +230,7 @@ fn extract_simple(line: &str) -> Option<(&str, &str)> {
 
 /// Region name used by SP Flash Tool for preloader partitions. These live in
 /// the EMMC boot regions (not the GPT-addressable user area) so the GUI can't
-/// flash them through `Device::write_partition`; we skip those rows.
+/// flash them through `Device::download`; we skip those rows.
 pub fn is_preloader_region(region: &str) -> bool {
     let r = region.to_ascii_uppercase();
     r.contains("BOOT1") || r.contains("BOOT_1") || r == "EMMC_BOOT1_BOOT2"

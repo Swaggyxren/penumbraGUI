@@ -118,11 +118,18 @@ impl Xml {
     }
 
     /// Checks for the lifetime acknowledgment (CMD:START or CMD:END).
-    fn check_lifetime(&mut self, lifetime: XmlCmdLifetime) -> Result<bool> {
+    ///
+    /// Returns `Ok(Ok(()))` on a clean lifetime token, `Ok(Err(msg))` when
+    /// the DA replied with `<result>ERR</result>` (msg is the device's
+    /// `<message>` body when present, otherwise empty).
+    fn check_lifetime(
+        &mut self,
+        lifetime: XmlCmdLifetime,
+    ) -> Result<core::result::Result<(), String>> {
         let data = match self.read_data() {
             Ok(d) => d,
             Err(Error::Timeout) => {
-                return Ok(true);
+                return Ok(Ok(()));
             }
             Err(e) => return Err(e),
         };
@@ -135,10 +142,23 @@ impl Xml {
         if data.windows(20).any(|window| window == b"<result>ERR</result>") {
             // We need to ack before returning, or the device will hang.
             self.ack(None)?;
-            return Ok(false);
+            // Try to extract the DA's <message>...</message> body so the
+            // error surfaces something more useful than just "ERR".
+            let resp = String::from_utf8_lossy(&data);
+            let msg: String = crate::utilities::xml::get_tag(&resp, "arg/message")
+                .or_else(|_| crate::utilities::xml::get_tag::<String>(&resp, "message"))
+                .unwrap_or_default()
+                .trim()
+                .trim_end_matches('\0')
+                .to_string();
+            return Ok(Err(msg));
         }
 
-        Ok(data.windows(pattern.len()).any(|window| window == pattern))
+        if data.windows(pattern.len()).any(|window| window == pattern) {
+            Ok(Ok(()))
+        } else {
+            Ok(Err(String::new()))
+        }
     }
 
     /// Sends an acknowledgment to the device.
@@ -171,11 +191,20 @@ impl Xml {
 
     /// Acknowledges the lifetime of an XML command (CMD:START or CMD:END).
     pub fn lifetime_ack(&mut self, lifetime: XmlCmdLifetime) -> Result<bool> {
-        let is_valid = self.check_lifetime(lifetime)?;
-        if !is_valid {
-            return Err(Error::io("Invalid lifetime acknowledgment"));
+        match self.check_lifetime(lifetime)? {
+            Ok(()) => self.ack(None),
+            Err(msg) => {
+                let stage = match lifetime {
+                    XmlCmdLifetime::CmdStart => "start",
+                    XmlCmdLifetime::CmdEnd => "end",
+                };
+                if msg.is_empty() {
+                    Err(Error::io(format!("DA reported an error at command {stage}")))
+                } else {
+                    Err(Error::io(format!("DA reported an error at command {stage}: {msg}")))
+                }
+            }
         }
-        self.ack(None)
     }
 
     /// Sends an XML command to the device.
@@ -230,6 +259,16 @@ impl Xml {
 
         let packet_length: usize = get_tag_usize(&resp_string, "arg/packet_length")?;
 
+        // USB write chunk size — must match send_data() so we honor any
+        // negotiated `write_packet_length`. Bulk transfers larger than this
+        // can fail on some hosts.
+        let usb_chunk_size = self.write_packet_length.unwrap_or(0x8000);
+        // How often we fire the progress callback. We tick at every USB chunk
+        // boundary that crosses this multiple, which on a multi-MB DA packet
+        // gives ~1 tick per 256 KB instead of one per packet — smooth bar
+        // without flooding the channel.
+        const PROGRESS_GRANULARITY: usize = 256 * 1024;
+
         let mut chunk = vec![0u8; packet_length];
         let mut bytes_sent = 0;
 
@@ -241,11 +280,27 @@ impl Xml {
             self.ack(Some(0))?;
             self.read_ack()?;
 
-            self.send(&chunk[..to_read])?;
+            // Write one packet header for the whole `to_read`, then stream the
+            // body in USB-sized writes, ticking progress at PROGRESS_GRANULARITY
+            // boundaries. The DA sees a single packet either way.
+            let hdr = self.generate_header(&chunk[..to_read]);
+            self.conn.write(&hdr)?;
+
+            let mut sub_sent = 0;
+            let mut next_tick = PROGRESS_GRANULARITY.min(to_read);
+            while sub_sent < to_read {
+                let end = (sub_sent + usb_chunk_size).min(to_read);
+                self.conn.write(&chunk[sub_sent..end])?;
+                sub_sent = end;
+                if sub_sent >= next_tick {
+                    progress(bytes_sent + sub_sent, size);
+                    next_tick = (sub_sent + PROGRESS_GRANULARITY).min(to_read);
+                }
+            }
+
             self.read_ack()?;
 
             bytes_sent += to_read;
-            progress(bytes_sent, size);
         }
 
         debug!("File download completed, 0x{:X} bytes sent.", size);
