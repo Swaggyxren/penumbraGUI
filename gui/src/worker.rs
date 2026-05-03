@@ -330,6 +330,76 @@ impl Worker {
         Ok(())
     }
 
+    /// Erase the standard "factory reset" partitions: userdata, metadata, persist.
+    ///
+    /// Uses `Device::format` (which sends `ErasePartition` xmlcmd, the
+    /// name-based path) rather than `Device::erase_partition` (which sends
+    /// `EraseFlash` for a raw region). The name-based path is in the same
+    /// family as `WritePartition` / `download`, so it goes through on
+    /// hardened bootloaders (e.g. Transsion: Tecno / Infinix / Itel) that
+    /// reject the raw-region erase path with a security error.
+    ///
+    /// Skips partitions that aren't present in the PGPT (some devices don't
+    /// have `metadata` or `persist`). Stops on the first hard error so the
+    /// user sees exactly which one the DA refused.
+    fn wipe_data(&mut self) -> Result<()> {
+        let evt_tx = self.evt_tx.clone();
+        let cancel = self.cancel.clone();
+        let device = self.device.as_mut().ok_or_else(|| anyhow!("No device connected"))?;
+        device.enter_da_mode().map_err(|e| anyhow!("{}", friendly(&e)))?;
+
+        const TARGETS: &[&str] = &["userdata", "metadata", "persist"];
+        let present: Vec<&str> =
+            TARGETS.iter().copied().filter(|n| device.dev_info.get_partition(n).is_some()).collect();
+
+        if present.is_empty() {
+            return Err(anyhow!(
+                "None of userdata / metadata / persist were found in the device's partition table."
+            ));
+        }
+
+        info!("Wiping data: {}", present.join(", "));
+
+        for name in present {
+            if cancel.swap(false, Ordering::SeqCst) {
+                warn!("Wipe cancelled before '{name}'");
+                return Err(anyhow!("Cancelled by user"));
+            }
+
+            // Look up the partition size so the progress bar's `total` matches
+            // the byte counts the DA's format callback emits. Without this,
+            // the bar shows e.g. "4.3 GB / 1 B" because ProgressStart locked
+            // total to 1 but the callback streams real byte counts.
+            let part_size = device
+                .dev_info
+                .get_partition(name)
+                .map(|p| p.size as u64)
+                .unwrap_or(1);
+
+            let _ = evt_tx.send(Event::ProgressStart {
+                total_bytes: part_size,
+                message: format!("Erasing {name}"),
+            });
+
+            let mut callback = Self::make_progress_callback(evt_tx.clone(), "Erasing");
+            match device.format(name, &mut callback) {
+                Ok(_) => {
+                    info!("Erased '{name}' OK");
+                    let _ =
+                        evt_tx.send(Event::ProgressFinish { message: format!("Erased '{name}' OK") });
+                }
+                Err(e) => {
+                    let _ = evt_tx.send(Event::ProgressFinish {
+                        message: format!("Erase '{name}' FAILED"),
+                    });
+                    return Err(anyhow!("{}", friendly(&e)));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn reboot(&mut self, mode: BootMode) -> Result<()> {
         let device = self.device.as_mut().ok_or_else(|| anyhow!("No device connected"))?;
         info!("Rebooting (mode={:?})...", mode);
@@ -382,6 +452,7 @@ fn run(cmd_rx: Receiver<Command>, evt_tx: Sender<Event>, cancel: Arc<AtomicBool>
             }
             Command::WriteAssigned { assignments } => worker.write_assigned(assignments),
             Command::Seccfg(action) => worker.seccfg(action),
+            Command::WipeData => worker.wipe_data(),
             Command::Reboot(mode) => worker.reboot(mode),
             Command::Shutdown => worker.shutdown(),
             Command::Cancel | Command::Disconnect => Ok(()),

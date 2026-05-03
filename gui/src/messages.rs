@@ -44,6 +44,11 @@ pub enum Command {
     WriteAssigned { assignments: Vec<(String, PathBuf)> },
     /// Flip the seccfg lock state. Requires DA extensions / a vulnerable device.
     Seccfg(LockAction),
+    /// Erase the userdata / metadata / persist partitions (factory reset).
+    /// Uses the same `ErasePartition` (name-based) command path that
+    /// `download` / WRITE-PARTITION uses, so it survives security checks on
+    /// hardened bootloaders that reject the raw-region erase path.
+    WipeData,
     /// Reboot the device.
     Reboot(BootMode),
     /// Shut down the device.
