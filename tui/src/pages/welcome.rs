@@ -19,13 +19,7 @@ use ratatui::widgets::Paragraph;
 use super::LOGO;
 use crate::app::{AppCtx, AppPage};
 use crate::components::{
-    Card,
-    CardRow,
-    DescriptionMenu,
-    DescriptionMenuItem,
-    ExplorerResult,
-    FileExplorer,
-    Stars,
+    Card, CardRow, DescriptionMenu, DescriptionMenuItem, ExplorerResult, FileExplorer, Stars,
     ThemedWidgetMut,
 };
 use crate::pages::Page;

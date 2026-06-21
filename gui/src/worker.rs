@@ -29,6 +29,7 @@ use crate::error_format::friendly;
 use crate::messages::{Command, ConnStatus, Event, LockAction};
 
 /// Handle kept by the UI thread for talking to the worker.
+#[allow(dead_code)]
 pub struct WorkerHandle {
     pub cmd_tx: Sender<Command>,
     pub cancel: Arc<AtomicBool>,

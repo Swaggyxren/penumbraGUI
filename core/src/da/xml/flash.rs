@@ -9,11 +9,7 @@ use log::debug;
 use crate::core::storage::{PartitionKind, is_pl_part};
 use crate::da::Xml;
 use crate::da::xml::cmds::{
-    ErasePartition,
-    FileSystemOp,
-    ReadPartition,
-    WritePartition,
-    XmlCmdLifetime,
+    ErasePartition, FileSystemOp, ReadPartition, WritePartition, XmlCmdLifetime,
 };
 use crate::da::xml::{EraseFlash, ReadFlash, WriteFlash};
 use crate::error::Result;

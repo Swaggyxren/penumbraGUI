@@ -12,25 +12,13 @@ use crate::connection::port::ConnectionType;
 use crate::core::devinfo::DeviceInfo;
 use crate::core::seccfg::LockFlag;
 use crate::core::storage::{
-    Gpt,
-    Partition,
-    PartitionKind,
-    RpmbRegion,
-    Storage,
-    StorageKind,
-    StorageType,
+    Gpt, Partition, PartitionKind, RpmbRegion, Storage, StorageKind, StorageType,
 };
 use crate::da::protocol::BootMode;
 use crate::da::xflash::cmds::*;
 #[cfg(not(feature = "no_exploits"))]
 use crate::da::xflash::exts::{
-    auth_rpmb,
-    peek,
-    poke,
-    read_rpmb,
-    read32_ext,
-    write_rpmb,
-    write32_ext,
+    auth_rpmb, peek, poke, read_rpmb, read32_ext, write_rpmb, write32_ext,
 };
 use crate::da::xflash::flash;
 #[cfg(not(feature = "no_exploits"))]

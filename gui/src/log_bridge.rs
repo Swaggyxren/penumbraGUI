@@ -57,8 +57,7 @@ const QUIET_TARGETS: &[&str] = &[
 
 impl ChannelLogger {
     fn new(sender: Sender<LogLine>, verbose: bool) -> Self {
-        let (default, mut per_target) =
-            parse_filter(&std::env::var("RUST_LOG").ok(), verbose);
+        let (default, mut per_target) = parse_filter(&std::env::var("RUST_LOG").ok(), verbose);
 
         // Quiet noisy framework crates by default, but only if the user
         // hasn't already opted them in via RUST_LOG.

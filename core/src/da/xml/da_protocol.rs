@@ -11,23 +11,11 @@ use crate::connection::port::ConnectionType;
 use crate::core::devinfo::DeviceInfo;
 use crate::core::seccfg::LockFlag;
 use crate::core::storage::{
-    Gpt,
-    Partition,
-    PartitionKind,
-    RpmbRegion,
-    Storage,
-    StorageKind,
-    StorageType,
+    Gpt, Partition, PartitionKind, RpmbRegion, Storage, StorageKind, StorageType,
 };
 use crate::da::protocol::{BootMode, DownloadProtocol};
 use crate::da::xml::cmds::{
-    BootTo,
-    HOST_CMDS,
-    HostSupportedCommands,
-    NotifyInitHw,
-    Reboot,
-    SetBootMode,
-    XmlCmdLifetime,
+    BootTo, HOST_CMDS, HostSupportedCommands, NotifyInitHw, Reboot, SetBootMode, XmlCmdLifetime,
 };
 use crate::da::xml::flash;
 #[cfg(not(feature = "no_exploits"))]

@@ -16,14 +16,7 @@ pub use core::auth::{AuthManager, SignData, SignPurpose, SignRequest, Signer};
 pub use core::log_buffer::{DeviceLog, OnPush};
 pub use core::seccfg::LockFlag;
 pub use core::storage::{
-    EmmcPartition,
-    Gpt,
-    Partition,
-    PartitionKind,
-    RpmbRegion,
-    Storage,
-    StorageKind,
-    StorageType,
+    EmmcPartition, Gpt, Partition, PartitionKind, RpmbRegion, Storage, StorageKind, StorageType,
     UfsPartition,
 };
 

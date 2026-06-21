@@ -122,7 +122,7 @@ fn perform_rpmb_io(
     let pb = AntumbraProgress::new(num_sectors as u64 * 256);
     let mut progress_callback = pb.get_callback(
         if is_read { "Reading RPMB..." } else { "Writing RPMB..." },
-        if is_read { "RPMB Read Complete!" } else { "RPMB Write Complete!" }
+        if is_read { "RPMB Read Complete!" } else { "RPMB Write Complete!" },
     );
 
     if is_read {

@@ -33,18 +33,10 @@ use tokio::time::{Duration, sleep};
 
 use crate::app::{AppCtx, AppPage};
 use crate::components::selectable_list::{
-    ListItemEntry,
-    ListItemEntryBuilder,
-    SelectableList,
-    SelectableListBuilder,
+    ListItemEntry, ListItemEntryBuilder, SelectableList, SelectableListBuilder,
 };
 use crate::components::{
-    ExplorerResult,
-    FileExplorer,
-    ProgressBar,
-    Stars,
-    ThemedWidgetMut,
-    ThemedWidgetRef,
+    ExplorerResult, FileExplorer, ProgressBar, Stars, ThemedWidgetMut, ThemedWidgetRef,
 };
 use crate::pages::Page;
 

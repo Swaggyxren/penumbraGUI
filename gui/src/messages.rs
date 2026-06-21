@@ -26,6 +26,7 @@ pub enum LockAction {
 
 /// A request from the UI to the worker thread.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum Command {
     /// Connect to the first MTK device currently visible on USB.
     Connect {

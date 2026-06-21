@@ -15,20 +15,9 @@ use crate::core::log_buffer::DeviceLog;
 use crate::core::storage::StorageKind;
 use crate::da::protocol::{DAProtocolParams, DataType, PacketHeader};
 use crate::da::xml::cmds::{
-    CMD_END,
-    CMD_START,
-    FileSystemOp,
-    GetSysProperty,
-    HOST_CMDS,
-    HostSupportedCommands,
-    NotifyInitHw,
-    SecurityGetDevFwInfo,
-    SecuritySetFlashPolicy,
-    SetHostInfo,
-    SetRuntimeParameter,
-    XmlCmdLifetime,
-    XmlCommand,
-    create_cmd,
+    CMD_END, CMD_START, FileSystemOp, GetSysProperty, HOST_CMDS, HostSupportedCommands,
+    NotifyInitHw, SecurityGetDevFwInfo, SecuritySetFlashPolicy, SetHostInfo, SetRuntimeParameter,
+    XmlCmdLifetime, XmlCommand, create_cmd,
 };
 #[cfg(not(feature = "no_exploits"))]
 use crate::da::xml::exts::boot_extensions;

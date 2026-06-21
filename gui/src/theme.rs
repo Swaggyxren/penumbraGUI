@@ -12,96 +12,42 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThemeId {
-    DarkPurple,
-    DarkBlue,
-    DarkTeal,
-    Light,
+    PenumbraTactical,
 }
 
 impl ThemeId {
-    pub const ALL: &'static [ThemeId] =
-        &[ThemeId::DarkPurple, ThemeId::DarkBlue, ThemeId::DarkTeal, ThemeId::Light];
+    pub const ALL: &'static [ThemeId] = &[ThemeId::PenumbraTactical];
 
     pub fn label(self) -> &'static str {
         match self {
-            ThemeId::DarkPurple => "Dark Purple",
-            ThemeId::DarkBlue => "Dark Blue",
-            ThemeId::DarkTeal => "Dark Teal",
-            ThemeId::Light => "Light",
+            ThemeId::PenumbraTactical => "Penumbra Tactical",
         }
     }
 
     pub fn palette(self) -> Palette {
         match self {
-            ThemeId::DarkPurple => Palette {
-                background: Color32::from_rgb(0x0E, 0x0B, 0x18),
-                panel: Color32::from_rgb(0x18, 0x12, 0x2A),
-                panel_alt: Color32::from_rgb(0x1F, 0x18, 0x36),
-                border: Color32::from_rgb(0x3A, 0x2E, 0x5A),
-                text: Color32::from_rgb(0xE8, 0xE4, 0xF2),
-                text_muted: Color32::from_rgb(0xA8, 0xA0, 0xC0),
-                accent: Color32::from_rgb(0x8B, 0x5C, 0xF6),
-                accent_strong: Color32::from_rgb(0xA8, 0x7C, 0xFF),
-                success: Color32::from_rgb(0x34, 0xD3, 0x99),
-                warn: Color32::from_rgb(0xF5, 0xA6, 0x3D),
-                error: Color32::from_rgb(0xF4, 0x72, 0x7E),
-                header_badge: Color32::from_rgb(0x7C, 0x3A, 0xED),
-                smart_backup: Color32::from_rgb(0x14, 0xB8, 0xA6),
+            ThemeId::PenumbraTactical => Palette {
+                background: Color32::from_rgb(0x0D, 0x0F, 0x14), // #0d0f14
+                panel: Color32::from_rgb(0x16, 0x19, 0x20),      // #161920
+                panel_alt: Color32::from_rgb(0x1E, 0x1F, 0x25),  // #1e1f25
+                border: Color32::from_rgba_unmultiplied(0xFF, 0xFF, 0xFF, 0x0F), // #ffffff0f
+                text: Color32::from_rgb(0xE2, 0xE2, 0xE9),
+                text_muted: Color32::from_rgb(0xC9, 0xC4, 0xD7), // #c9c4d7
+                accent: Color32::from_rgb(0x7C, 0x6A, 0xF7),     // #7c6af7
+                accent_strong: Color32::from_rgb(0x5A, 0x46, 0xD3), // inverse_primary
+                success: Color32::from_rgb(0x4A, 0xDE, 0x80),    // #4ade80
+                warn: Color32::from_rgb(0xFF, 0xB8, 0x6D),       // tertiary
+                error: Color32::from_rgb(0xF8, 0x71, 0x71),      // #f87171
+                header_badge: Color32::from_rgb(0x7C, 0x6A, 0xF7), // accent
+                smart_backup: Color32::from_rgb(0x4A, 0xDE, 0x80), // success
                 is_dark: true,
-            },
-            ThemeId::DarkBlue => Palette {
-                background: Color32::from_rgb(0x0A, 0x10, 0x1C),
-                panel: Color32::from_rgb(0x11, 0x1B, 0x2E),
-                panel_alt: Color32::from_rgb(0x16, 0x24, 0x3C),
-                border: Color32::from_rgb(0x27, 0x3A, 0x5A),
-                text: Color32::from_rgb(0xE4, 0xEC, 0xF7),
-                text_muted: Color32::from_rgb(0x90, 0xA4, 0xC0),
-                accent: Color32::from_rgb(0x3B, 0x82, 0xF6),
-                accent_strong: Color32::from_rgb(0x60, 0xA5, 0xFA),
-                success: Color32::from_rgb(0x34, 0xD3, 0x99),
-                warn: Color32::from_rgb(0xF5, 0xA6, 0x3D),
-                error: Color32::from_rgb(0xF4, 0x72, 0x7E),
-                header_badge: Color32::from_rgb(0x25, 0x63, 0xEB),
-                smart_backup: Color32::from_rgb(0x14, 0xB8, 0xA6),
-                is_dark: true,
-            },
-            ThemeId::DarkTeal => Palette {
-                background: Color32::from_rgb(0x08, 0x14, 0x14),
-                panel: Color32::from_rgb(0x0E, 0x1F, 0x20),
-                panel_alt: Color32::from_rgb(0x13, 0x2B, 0x2D),
-                border: Color32::from_rgb(0x24, 0x48, 0x4A),
-                text: Color32::from_rgb(0xE2, 0xF3, 0xF1),
-                text_muted: Color32::from_rgb(0x90, 0xB5, 0xB0),
-                accent: Color32::from_rgb(0x14, 0xB8, 0xA6),
-                accent_strong: Color32::from_rgb(0x2D, 0xD4, 0xBF),
-                success: Color32::from_rgb(0x34, 0xD3, 0x99),
-                warn: Color32::from_rgb(0xF5, 0xA6, 0x3D),
-                error: Color32::from_rgb(0xF4, 0x72, 0x7E),
-                header_badge: Color32::from_rgb(0x0F, 0x76, 0x6E),
-                smart_backup: Color32::from_rgb(0x14, 0xB8, 0xA6),
-                is_dark: true,
-            },
-            ThemeId::Light => Palette {
-                background: Color32::from_rgb(0xF4, 0xF2, 0xFA),
-                panel: Color32::from_rgb(0xFF, 0xFF, 0xFF),
-                panel_alt: Color32::from_rgb(0xEC, 0xE7, 0xF7),
-                border: Color32::from_rgb(0xC8, 0xBF, 0xDA),
-                text: Color32::from_rgb(0x1A, 0x16, 0x28),
-                text_muted: Color32::from_rgb(0x6A, 0x60, 0x80),
-                accent: Color32::from_rgb(0x7C, 0x3A, 0xED),
-                accent_strong: Color32::from_rgb(0x6D, 0x28, 0xD9),
-                success: Color32::from_rgb(0x0E, 0x9F, 0x6E),
-                warn: Color32::from_rgb(0xD9, 0x77, 0x06),
-                error: Color32::from_rgb(0xDC, 0x26, 0x26),
-                header_badge: Color32::from_rgb(0x7C, 0x3A, 0xED),
-                smart_backup: Color32::from_rgb(0x0D, 0x94, 0x88),
-                is_dark: false,
             },
         }
     }
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
 pub struct Palette {
     pub background: Color32,
     pub panel: Color32,
@@ -137,7 +83,7 @@ pub fn apply(palette: Palette, ctx: &eframe::egui::Context) {
     };
     visuals.hyperlink_color = palette.accent_strong;
 
-    let round = Rounding::same(6.0);
+    let round = Rounding::same(4.0);
     let widgets = Widgets {
         noninteractive: WidgetVisuals {
             bg_fill: palette.panel,

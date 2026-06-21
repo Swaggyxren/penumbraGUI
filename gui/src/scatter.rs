@@ -23,6 +23,7 @@ pub struct ScatterFile {
 }
 
 #[derive(Clone, Debug, Default)]
+#[allow(dead_code)]
 pub struct ScatterEntry {
     pub index: String,
     pub name: String,

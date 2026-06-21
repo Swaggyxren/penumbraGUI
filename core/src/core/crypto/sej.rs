@@ -14,7 +14,7 @@
 */
 use aes::Aes128;
 use cbc::{Decryptor, Encryptor}; /* TODO: Recheck this crate, as it doesn't receive stable
-                                   * updates for 3+ years */
+ * updates for 3+ years */
 use cipher::block_padding::Pkcs7;
 use cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 

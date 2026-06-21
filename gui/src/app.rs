@@ -10,18 +10,8 @@ use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 
 use eframe::egui::{
-    self,
-    Align,
-    Color32,
-    Frame,
-    Layout,
-    Margin,
-    ProgressBar,
-    RichText,
-    Rounding,
-    ScrollArea,
-    Stroke,
-    TextEdit,
+    self, Align, Color32, Frame, Layout, Margin, ProgressBar, RichText, Rounding, ScrollArea,
+    Stroke, TextEdit,
 };
 use egui_extras::{Column, TableBuilder};
 use human_bytes::human_bytes;
@@ -39,24 +29,27 @@ const LOG_SCROLLBACK: usize = 4000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum Tab {
     Pgpt,
-    Scatter,
-    Operations,
+    Flash,
+    Log,
+    Settings,
 }
 
 impl Tab {
     fn label(self) -> &'static str {
         match self {
             Tab::Pgpt => "PGPT Manager",
-            Tab::Scatter => "Scatter/XML Flasher",
-            Tab::Operations => "Operations",
+            Tab::Flash => "Flash",
+            Tab::Log => "Log",
+            Tab::Settings => "Settings",
         }
     }
 
     fn icon(self) -> &'static str {
         match self {
             Tab::Pgpt => "📁",
-            Tab::Scatter => "📄",
-            Tab::Operations => "⚙",
+            Tab::Flash => "⚡",
+            Tab::Log => "📄",
+            Tab::Settings => "⚙",
         }
     }
 }
@@ -78,7 +71,7 @@ struct Persisted {
 impl Default for Persisted {
     fn default() -> Self {
         Self {
-            theme: ThemeId::DarkPurple,
+            theme: ThemeId::PenumbraTactical,
             tab: Tab::Pgpt,
             da_path: None,
             preloader_path: None,
@@ -138,6 +131,7 @@ pub struct App {
 }
 
 /// Runtime state for the Scatter/XML Flasher tab.
+#[allow(dead_code)]
 struct ScatterView {
     file: crate::scatter::ScatterFile,
     #[allow(dead_code)]
@@ -162,6 +156,7 @@ enum LogLevelFilter {
     ErrorOnly,
 }
 
+#[allow(dead_code)]
 impl LogLevelFilter {
     fn matches(self, level: log::Level) -> bool {
         match self {
@@ -186,6 +181,7 @@ impl LogLevelFilter {
 enum ConfirmAction {
     UnlockBootloader,
     LockBootloader,
+    #[allow(dead_code)]
     WriteAssigned(Vec<(String, PathBuf)>),
     FlashScatter(Vec<(String, PathBuf)>),
     Reboot(BootMode),
@@ -426,6 +422,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     fn cancel(&self) {
         self.handle.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
         let _ = self.handle.cmd_tx.send(Command::Cancel);
@@ -441,28 +438,116 @@ impl eframe::App for App {
         self.drain_events(ctx);
         theme::apply(self.persisted.theme.palette(), ctx);
 
-        // Paint the root background explicitly so themes feel "full-bleed".
         let palette = self.persisted.theme.palette();
 
+        // Fixed Sidebar (220px)
+        egui::SidePanel::left("sidebar")
+            .exact_width(220.0)
+            .resizable(false)
+            .frame(
+                egui::Frame::none()
+                    .fill(palette.panel)
+                    .stroke(Stroke::new(1.0_f32, palette.border)),
+            )
+            .show(ctx, |ui| {
+                ui.add_space(24.0);
+                ui.vertical_centered(|ui| {
+                    badge(ui, "PENUMBRA", palette.header_badge, Color32::WHITE);
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                            .color(palette.text_muted)
+                            .size(12.0),
+                    );
+                });
+                ui.add_space(32.0);
+
+                for &tab in &[Tab::Pgpt, Tab::Flash, Tab::Log, Tab::Settings] {
+                    let active = self.persisted.tab == tab;
+                    let label = format!("{}  {}", tab.icon(), tab.label());
+
+                    ui.add_space(4.0);
+
+                    // Add padding to menu items
+                    let mut frame = egui::Frame::none().inner_margin(Margin::symmetric(16.0, 12.0));
+
+                    if active {
+                        frame = frame
+                            .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 10))
+                            .stroke(Stroke::new(2.0, palette.accent)); // 2px left border simulate
+                    }
+
+                    frame.show(ui, |ui| {
+                        let text = if active {
+                            RichText::new(label).strong().color(palette.accent)
+                        } else {
+                            RichText::new(label).color(palette.text_muted)
+                        };
+
+                        if ui
+                            .add_sized(
+                                [ui.available_width(), 24.0],
+                                egui::SelectableLabel::new(active, text),
+                            )
+                            .clicked()
+                        {
+                            self.persisted.tab = tab;
+                        }
+                    });
+                }
+            });
+
+        // Top Header
         egui::TopBottomPanel::top("header")
             .exact_height(64.0)
-            .frame(panel_frame(palette.panel, palette.border, 0.0))
-            .show(ctx, |ui| self.draw_header(ui));
+            .frame(
+                egui::Frame::none()
+                    .fill(palette.background)
+                    .stroke(Stroke::new(1.0_f32, palette.border))
+                    .inner_margin(Margin::symmetric(24.0, 16.0)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(self.persisted.tab.label().to_uppercase())
+                            .strong()
+                            .size(20.0)
+                            .color(palette.text),
+                    );
 
-        egui::TopBottomPanel::top("file_row")
-            .exact_height(90.0)
-            .frame(panel_frame(palette.panel, palette.border, 0.0))
-            .show(ctx, |ui| self.draw_file_row(ui));
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let connected = matches!(self.status, ConnStatus::Connected { .. });
+                        let ui_enabled =
+                            self.input_enabled && !matches!(self.status, ConnStatus::Connecting);
 
-        egui::TopBottomPanel::top("tabs")
-            .exact_height(40.0)
-            .frame(panel_frame(palette.panel, palette.border, 0.0))
-            .show(ctx, |ui| self.draw_tab_bar(ui));
+                        // Power Operations
+                        if ui
+                            .add_enabled(
+                                connected && ui_enabled,
+                                egui::Button::new("⏻").min_size(egui::vec2(32.0, 32.0)),
+                            )
+                            .on_hover_text("Shut Down")
+                            .clicked()
+                        {
+                            self.open_confirm(ConfirmAction::Shutdown);
+                        }
+                        ui.add_space(8.0);
+                        if ui
+                            .add_enabled(
+                                connected && ui_enabled,
+                                egui::Button::new("↻").min_size(egui::vec2(32.0, 32.0)),
+                            )
+                            .on_hover_text("Reboot")
+                            .clicked()
+                        {
+                            self.open_confirm(ConfirmAction::Reboot(BootMode::Normal));
+                        }
 
-        egui::TopBottomPanel::bottom("status")
-            .exact_height(46.0)
-            .frame(panel_frame(palette.panel_alt, palette.border, 0.0))
-            .show(ctx, |ui| self.draw_status_bar(ui));
+                        ui.add_space(16.0);
+                        self.draw_status_pill(ui, palette);
+                    });
+                });
+            });
 
         if self.progress.active || self.progress.total > 0 {
             egui::TopBottomPanel::bottom("progress")
@@ -471,25 +556,16 @@ impl eframe::App for App {
                 .show(ctx, |ui| self.draw_progress_bar(ui));
         }
 
-        let log_panel = egui::SidePanel::right("execution_log")
-            .resizable(true)
-            .default_width(self.persisted.log_panel_width)
-            .width_range(180.0..=900.0)
-            .frame(panel_frame(palette.panel, palette.border, 0.0))
-            .show(ctx, |ui| self.draw_exec_log(ui, palette));
-        let new_log_width = log_panel.response.rect.width();
-        if (new_log_width - self.persisted.log_panel_width).abs() > 0.5 {
-            self.persisted.log_panel_width = new_log_width;
-        }
-
+        // Main Content Area
         egui::CentralPanel::default()
-            .frame(panel_frame(palette.background, palette.border, 0.0))
+            .frame(egui::Frame::none().fill(palette.background).inner_margin(Margin::same(24.0)))
             .show(ctx, |ui| {
                 self.draw_error_banner(ui, palette);
                 match self.persisted.tab {
                     Tab::Pgpt => self.draw_pgpt_tab(ui, palette),
-                    Tab::Scatter => self.draw_scatter_tab(ui, palette),
-                    Tab::Operations => self.draw_operations_tab(ui, palette),
+                    Tab::Flash => self.draw_scatter_tab(ui, palette),
+                    Tab::Log => self.draw_log_tab(ui, palette),
+                    Tab::Settings => self.draw_settings_tab(ui, palette),
                 }
             });
 
@@ -510,6 +586,7 @@ impl eframe::App for App {
 /// chain. Several glyphs we use in the UI (e.g. ←, ●, ○, geometric/arrow
 /// blocks) are only present in Hack, so without this fallback they
 /// render as tofu boxes inside RichText labels and dialog bodies.
+
 fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
     if let Some(prop) = fonts.families.get_mut(&egui::FontFamily::Proportional)
@@ -520,6 +597,7 @@ fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+#[allow(dead_code)]
 fn timestamp_stamp() -> String {
     // UNIX seconds formatted as `YYYYMMDD-HHMMSS` (UTC). Pure std; avoids
     // pulling in another dependency just for folder names.
@@ -601,36 +679,6 @@ fn badge(ui: &mut egui::Ui, text: &str, fill: Color32, fg: Color32) {
 }
 
 impl App {
-    fn draw_header(&mut self, ui: &mut egui::Ui) {
-        let palette = self.persisted.theme.palette();
-        ui.horizontal(|ui| {
-            badge(ui, "PENUMBRA TOOL", palette.header_badge, Color32::WHITE);
-            ui.add_space(10.0);
-            ui.label(RichText::new("Penumbra Flash Tool").strong().color(palette.text).size(16.0));
-            ui.add_space(6.0);
-            ui.label(
-                RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
-                    .color(palette.text_muted)
-                    .size(12.0),
-            );
-
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.horizontal(|ui| {
-                    egui::ComboBox::from_id_salt("theme_combo")
-                        .selected_text(self.persisted.theme.label())
-                        .show_ui(ui, |ui| {
-                            for &t in ThemeId::ALL {
-                                ui.selectable_value(&mut self.persisted.theme, t, t.label());
-                            }
-                        });
-                    ui.label(RichText::new("Theme:").color(palette.text_muted));
-                });
-                ui.add_space(12.0);
-                self.draw_status_pill(ui, palette);
-            });
-        });
-    }
-
     fn draw_status_pill(&self, ui: &mut egui::Ui, palette: theme::Palette) {
         let (label, color) = match &self.status {
             ConnStatus::Disconnected => ("Disconnected".to_string(), palette.text_muted),
@@ -648,15 +696,6 @@ impl App {
                 status_dot(ui, color);
                 ui.label(RichText::new(label).color(palette.text));
             });
-    }
-
-    fn draw_file_row(&mut self, ui: &mut egui::Ui) {
-        let palette = self.persisted.theme.palette();
-        ui.vertical(|ui| {
-            self.draw_path_row(ui, palette, "Download Agent (DA):", PathKind::Da);
-            ui.add_space(4.0);
-            self.draw_path_row(ui, palette, "Output/Backup Folder:", PathKind::OutputDir);
-        });
     }
 
     fn draw_path_row(
@@ -730,112 +769,6 @@ impl App {
         }
     }
 
-    fn draw_tab_bar(&mut self, ui: &mut egui::Ui) {
-        let palette = self.persisted.theme.palette();
-        ui.horizontal(|ui| {
-            for &tab in &[Tab::Pgpt, Tab::Scatter, Tab::Operations] {
-                let active = self.persisted.tab == tab;
-                let label = format!("{} {}", tab.icon(), tab.label());
-                let text = if active {
-                    RichText::new(label).strong().color(Color32::WHITE)
-                } else {
-                    RichText::new(label).color(palette.text)
-                };
-                let mut btn = egui::Button::new(text).min_size(egui::vec2(180.0, 26.0));
-                if active {
-                    btn = btn
-                        .fill(palette.accent)
-                        .stroke(Stroke::new(1.0_f32, palette.accent_strong));
-                }
-                if ui.add(btn).clicked() {
-                    self.persisted.tab = tab;
-                }
-                ui.add_space(4.0);
-            }
-
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let connected = matches!(self.status, ConnStatus::Connected { .. });
-                let ui_enabled =
-                    self.input_enabled && !matches!(self.status, ConnStatus::Connecting);
-
-                let label = if connected { "Disconnect" } else { "🔌 Connect" };
-                let btn = egui::Button::new(RichText::new(label).color(Color32::WHITE))
-                    .fill(if connected { palette.error } else { palette.accent })
-                    .stroke(Stroke::new(1.0_f32, palette.border))
-                    .min_size(egui::vec2(130.0, 26.0));
-                if ui.add_enabled(ui_enabled, btn).clicked() {
-                    if connected {
-                        self.send(Command::Disconnect);
-                    } else {
-                        self.send(Command::Connect {
-                            da_path: self.persisted.da_path.clone(),
-                            preloader_path: self.persisted.preloader_path.clone(),
-                            auth_path: self.persisted.auth_path.clone(),
-                        });
-                    }
-                }
-
-                ui.add_space(8.0);
-
-                let preloader_loaded = self.persisted.preloader_path.is_some();
-                let pl_btn = egui::Button::new(
-                    RichText::new(if preloader_loaded {
-                        "⚡ Preloader ✔"
-                    } else {
-                        "⚡ Preloader"
-                    })
-                    .color(palette.text),
-                )
-                .min_size(egui::vec2(120.0, 26.0));
-                if ui.add_enabled(self.input_enabled, pl_btn).clicked() {
-                    self.pick_path(PathKind::Preloader);
-                }
-
-                let auth_loaded = self.persisted.auth_path.is_some();
-                let auth_btn = egui::Button::new(
-                    RichText::new(if auth_loaded { "🔑 Auth ✔" } else { "🔑 Auth" })
-                        .color(palette.text),
-                )
-                .min_size(egui::vec2(100.0, 26.0));
-                if ui.add_enabled(self.input_enabled, auth_btn).clicked() {
-                    self.pick_path(PathKind::Auth);
-                }
-            });
-        });
-    }
-
-    fn draw_status_bar(&self, ui: &mut egui::Ui) {
-        let palette = self.persisted.theme.palette();
-        ui.horizontal(|ui| {
-            let (label, color) = match &self.status {
-                ConnStatus::Disconnected => ("System Ready", palette.success),
-                ConnStatus::Connecting => ("Connecting...", palette.warn),
-                ConnStatus::Connected { .. } => ("Device Connected", palette.success),
-            };
-            status_dot(ui, color);
-            ui.label(RichText::new(label).color(color).strong());
-
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if self.input_enabled {
-                    ui.label(RichText::new("Idle").color(palette.text_muted));
-                } else {
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                RichText::new("■ STOP OPERATION").color(Color32::WHITE),
-                            )
-                            .fill(palette.error),
-                        )
-                        .clicked()
-                    {
-                        self.cancel();
-                    }
-                    ui.label(RichText::new("Busy...").color(palette.warn));
-                }
-            });
-        });
-    }
-
     fn draw_progress_bar(&self, ui: &mut egui::Ui) {
         let palette = self.persisted.theme.palette();
         let ratio = if self.progress.total == 0 {
@@ -884,115 +817,154 @@ impl App {
 
     fn draw_pgpt_tab(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
         let connected = matches!(self.status, ConnStatus::Connected { .. });
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new("Partition List (Double-click a row to assign an image):")
-                    .color(palette.text_muted),
-            );
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(
-                    RichText::new(format!("{} partitions", self.partitions.len()))
-                        .color(palette.text_muted),
-                );
+
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0, palette.border))
+            .rounding(Rounding::same(4.0))
+            .inner_margin(Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("OUTPUT FOLDER")
+                            .strong()
+                            .size(12.0)
+                            .color(palette.text_muted),
+                    );
+                    ui.add_space(8.0);
+
+                    let mut text = self
+                        .persisted
+                        .output_dir
+                        .as_ref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| String::from("Select output folder..."));
+
+                    let avail = ui.available_width() - 320.0;
+                    ui.add_sized(
+                        [avail.max(120.0), 32.0],
+                        TextEdit::singleline(&mut text).interactive(false),
+                    );
+
+                    if ui
+                        .add_enabled(
+                            self.input_enabled,
+                            egui::Button::new("Browse").min_size(egui::vec2(90.0, 32.0)),
+                        )
+                        .clicked()
+                    {
+                        self.pick_path(PathKind::OutputDir);
+                    }
+
+                    ui.add_space(8.0);
+
+                    if ui
+                        .add_enabled(
+                            connected && self.input_enabled,
+                            egui::Button::new("Refresh GPT").min_size(egui::vec2(120.0, 32.0)),
+                        )
+                        .clicked()
+                    {
+                        self.send(Command::LoadPgpt);
+                    }
+
+                    ui.add_space(8.0);
+
+                    let read_enabled =
+                        connected && self.input_enabled && !self.partitions.is_empty();
+                    let read_btn = egui::Button::new(
+                        RichText::new("⬇ Read Selected").color(Color32::WHITE).strong(),
+                    )
+                    .fill(palette.accent)
+                    .min_size(egui::vec2(140.0, 32.0));
+                    if ui.add_enabled(read_enabled, read_btn).clicked() {
+                        self.start_read_selected();
+                    }
+                });
             });
-        });
 
-        ui.add_space(4.0);
+        ui.add_space(16.0);
 
-        // Reserve room for the two action-button rows below the table so
-        // nothing gets clipped when the central pane is short.
-        const ACTION_ROWS_HEIGHT: f32 = 120.0;
-        let table_height = (ui.available_height() - ACTION_ROWS_HEIGHT).max(160.0);
-        ui.allocate_ui(egui::vec2(ui.available_width(), table_height), |ui| {
+        if self.progress.active || self.progress.total > 0 {
+            Frame::none()
+                .fill(palette.panel)
+                .stroke(Stroke::new(1.0, palette.border))
+                .rounding(Rounding::same(4.0))
+                .inner_margin(Margin::same(16.0))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(format!(
+                                "{} {}",
+                                if self.progress.active { "🔄" } else { "✔" },
+                                self.progress.message
+                            ))
+                            .strong()
+                            .size(14.0)
+                            .color(palette.text),
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            let ratio = if self.progress.total == 0 {
+                                0.0
+                            } else {
+                                (self.progress.written as f32 / self.progress.total as f32)
+                                    .clamp(0.0, 1.0)
+                            };
+                            ui.label(
+                                RichText::new(format!("{:.0}%", ratio * 100.0))
+                                    .strong()
+                                    .color(palette.accent_strong),
+                            );
+                        });
+                    });
+                    ui.add_space(8.0);
+                    let ratio = if self.progress.total == 0 {
+                        0.0
+                    } else {
+                        (self.progress.written as f32 / self.progress.total as f32).clamp(0.0, 1.0)
+                    };
+                    ui.add(
+                        ProgressBar::new(ratio)
+                            .desired_width(ui.available_width())
+                            .fill(palette.accent_strong),
+                    );
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(format!("Speed: -- MB/s"))
+                                .color(palette.text_muted)
+                                .size(12.0),
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.label(
+                                RichText::new(format!("Est. Time: --:--:--"))
+                                    .color(palette.text_muted)
+                                    .size(12.0),
+                            );
+                        });
+                    });
+                });
+            ui.add_space(16.0);
+        }
+
+        ui.allocate_ui(egui::vec2(ui.available_width(), ui.available_height()), |ui| {
             self.draw_partition_table(ui, palette);
-        });
-        ui.add_space(8.0);
-
-        ui.horizontal(|ui| {
-            let enabled = connected && self.input_enabled;
-            if ui
-                .add_enabled(
-                    enabled,
-                    egui::Button::new("📥 LOAD PGPT").min_size(egui::vec2(160.0, 28.0)),
-                )
-                .clicked()
-            {
-                self.send(Command::LoadPgpt);
-            }
-            ui.add_space(6.0);
-            if ui
-                .add_enabled(
-                    enabled && !self.partitions.is_empty(),
-                    egui::Button::new("⬇ READ SELECTED").min_size(egui::vec2(160.0, 28.0)),
-                )
-                .clicked()
-            {
-                self.start_read_selected();
-            }
-            ui.add_space(6.0);
-            if ui
-                .add_enabled(
-                    self.input_enabled
-                        && self.persisted.output_dir.is_some()
-                        && !self.partitions.is_empty(),
-                    egui::Button::new("✨ AUTO-ASSIGN").min_size(egui::vec2(160.0, 28.0)),
-                )
-                .clicked()
-            {
-                self.auto_assign_images();
-            }
-        });
-
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            let assignments = self.collect_assignments();
-            let write_enabled = connected && self.input_enabled && !assignments.is_empty();
-            let write_btn = egui::Button::new(
-                RichText::new("🔥 WRITE ASSIGNED").color(Color32::WHITE).strong(),
-            )
-            .fill(palette.accent_strong)
-            .min_size(egui::vec2(260.0, 32.0));
-            if ui.add_enabled(write_enabled, write_btn).clicked() {
-                self.open_confirm(ConfirmAction::WriteAssigned(assignments));
-            }
-
-            ui.add_space(6.0);
-
-            let smart_btn = egui::Button::new(
-                RichText::new("💾 SMART BACKUP (NVRAM / EFS / NVCFG)")
-                    .color(Color32::WHITE)
-                    .strong(),
-            )
-            .fill(palette.smart_backup)
-            .min_size(egui::vec2(340.0, 32.0));
-            if ui
-                .add_enabled(
-                    connected && self.input_enabled && self.persisted.output_dir.is_some(),
-                    smart_btn,
-                )
-                .clicked()
-            {
-                self.start_smart_backup();
-            }
         });
     }
 
     fn draw_partition_table(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
-        // Fills whatever height the parent `allocate_ui` gave us. The frame's
-        // inner_margin eats 12 px of vertical space; leave a little headroom.
-        let inner_min_height = (ui.available_height() - 12.0).max(160.0);
         Frame::none()
             .fill(palette.panel)
             .stroke(Stroke::new(1.0_f32, palette.border))
-            .rounding(Rounding::same(6.0))
-            .inner_margin(Margin::same(6.0))
+            .rounding(Rounding::same(4.0))
+            .inner_margin(Margin::same(0.0))
             .show(ui, |ui| {
-                ui.set_min_height(inner_min_height);
                 if self.partitions.is_empty() {
                     ui.centered_and_justified(|ui| {
                         ui.label(
                             RichText::new(
-                                "No partitions loaded.\nConnect a device and press LOAD PGPT.",
+                                "No partitions loaded.
+Connect a device and press Refresh GPT.",
                             )
                             .color(palette.text_muted),
                         );
@@ -1000,101 +972,136 @@ impl App {
                     return;
                 }
 
-                let mut assign_target: Option<usize> = None;
+                // Add some top padding before the table header
+                ui.add_space(8.0);
+
+                // Use the vline/hline config in table builder to remove vertical lines
                 TableBuilder::new(ui)
                     .striped(true)
-                    .resizable(true)
+                    .resizable(false)
+                    .vscroll(true)
                     .cell_layout(Layout::left_to_right(Align::Center))
-                    .column(Column::exact(28.0))
-                    .column(Column::auto().at_least(48.0))
-                    .column(Column::initial(220.0).at_least(120.0))
-                    .column(Column::auto().at_least(100.0))
-                    .column(Column::auto().at_least(120.0))
+                    .column(Column::exact(48.0))
+                    .column(Column::initial(220.0).at_least(180.0))
+                    .column(Column::initial(220.0).at_least(180.0))
+                    .column(Column::initial(220.0).at_least(180.0))
                     .column(Column::remainder().at_least(180.0))
-                    .header(22.0, |mut header| {
-                        for h in ["", "#", "Name", "Size", "Address", "Assigned Image"] {
+                    .header(32.0, |mut header| {
+                        for h in ["", "NAME", "START LBA", "SIZE (BYTES)", "TYPE / FLAGS"] {
                             header.col(|ui| {
-                                ui.label(RichText::new(h).strong().color(palette.text_muted));
+                                ui.label(
+                                    RichText::new(h).strong().size(11.0).color(palette.text_muted),
+                                );
                             });
                         }
                     })
                     .body(|mut body| {
-                        for (i, row) in self.partitions.iter_mut().enumerate() {
-                            body.row(22.0, |mut r| {
+                        for (_, row) in self.partitions.iter_mut().enumerate() {
+                            body.row(40.0, |mut r| {
                                 r.col(|ui| {
-                                    ui.checkbox(&mut row.selected, "");
+                                    // Center the checkbox
+                                    ui.centered_and_justified(|ui| {
+                                        ui.checkbox(&mut row.selected, "");
+                                    });
+                                });
+                                r.col(|ui| {
+                                    ui.horizontal(|ui| {
+                                        let text = if row.selected {
+                                            RichText::new(&row.partition.name)
+                                                .strong()
+                                                .color(palette.accent)
+                                        } else {
+                                            RichText::new(&row.partition.name).color(palette.text)
+                                        };
+                                        ui.label(text);
+
+                                        // Fake active/assigned indicator
+                                        if row.assigned_image.is_some() {
+                                            ui.add_space(4.0);
+                                            ui.label(
+                                                RichText::new("⮎").color(palette.accent_strong),
+                                            );
+                                        }
+                                    });
                                 });
                                 r.col(|ui| {
                                     ui.label(
-                                        RichText::new(format!("{i}")).color(palette.text_muted),
-                                    );
-                                });
-                                r.col(|ui| {
-                                    let resp = ui.add(
-                                        egui::Label::new(
-                                            RichText::new(&row.partition.name).color(palette.text),
-                                        )
-                                        .sense(egui::Sense::click()),
-                                    );
-                                    if resp.double_clicked() {
-                                        assign_target = Some(i);
-                                    }
-                                });
-                                r.col(|ui| {
-                                    ui.label(
-                                        RichText::new(human_bytes(row.partition.size as f64))
-                                            .color(palette.text),
+                                        RichText::new(format!("0x{:016X}", row.partition.address))
+                                            .color(palette.text_muted)
+                                            .family(egui::FontFamily::Monospace),
                                     );
                                 });
                                 r.col(|ui| {
                                     ui.label(
-                                        RichText::new(format!("0x{:X}", row.partition.address))
-                                            .color(palette.text_muted),
-                                    );
-                                });
-                                r.col(|ui| {
-                                    let text = row
-                                        .assigned_image
-                                        .as_ref()
-                                        .and_then(|p| p.file_name())
-                                        .and_then(|n| n.to_str())
-                                        .unwrap_or("—")
-                                        .to_string();
-                                    let resp = ui.add(
-                                        egui::Label::new(RichText::new(text).color(
-                                            if row.assigned_image.is_some() {
-                                                palette.accent_strong
-                                            } else {
-                                                palette.text_muted
-                                            },
+                                        RichText::new(format!(
+                                            "{} ({})",
+                                            row.partition.size,
+                                            human_bytes(row.partition.size as f64)
                                         ))
-                                        .sense(egui::Sense::click()),
+                                        .color(palette.text_muted)
+                                        .family(egui::FontFamily::Monospace),
                                     );
-                                    if resp.clicked() && row.assigned_image.is_some() {
-                                        row.assigned_image = None;
-                                    } else if resp.double_clicked() {
-                                        assign_target = Some(i);
-                                    }
+                                });
+                                r.col(|ui| {
+                                    ui.horizontal(|ui| {
+                                        let text = row
+                                            .assigned_image
+                                            .as_ref()
+                                            .and_then(|p| p.file_name())
+                                            .and_then(|n| n.to_str())
+                                            .unwrap_or("ext4")
+                                            .to_string();
+
+                                        // Dummy chip
+                                        Frame::none()
+                                            .fill(palette.panel_alt)
+                                            .rounding(Rounding::same(4.0))
+                                            .inner_margin(Margin::symmetric(8.0, 4.0))
+                                            .show(ui, |ui| {
+                                                ui.label(
+                                                    RichText::new(text)
+                                                        .color(palette.text)
+                                                        .size(12.0),
+                                                );
+                                            });
+
+                                        ui.add_space(8.0);
+
+                                        // Fake 'A'/'B' flag
+                                        if row.partition.name.ends_with("_a") {
+                                            Frame::none()
+                                                .fill(palette.success.gamma_multiply(0.2))
+                                                .rounding(Rounding::same(4.0))
+                                                .inner_margin(Margin::symmetric(8.0, 4.0))
+                                                .show(ui, |ui| {
+                                                    ui.label(
+                                                        RichText::new("A")
+                                                            .color(palette.success)
+                                                            .size(12.0),
+                                                    );
+                                                });
+                                        } else if row.partition.name.ends_with("_b") {
+                                            Frame::none()
+                                                .fill(palette.text_muted.gamma_multiply(0.2))
+                                                .rounding(Rounding::same(4.0))
+                                                .inner_margin(Margin::symmetric(8.0, 4.0))
+                                                .show(ui, |ui| {
+                                                    ui.label(
+                                                        RichText::new("B")
+                                                            .color(palette.text_muted)
+                                                            .size(12.0),
+                                                    );
+                                                });
+                                        }
+                                    });
                                 });
                             });
                         }
                     });
-
-                if let Some(idx) = assign_target
-                    && let Some(file) = rfd::FileDialog::new()
-                        .set_title(format!(
-                            "Assign image for '{}'",
-                            self.partitions[idx].partition.name
-                        ))
-                        .add_filter("images", &["img", "bin", "mbn"])
-                        .add_filter("all", &["*"])
-                        .pick_file()
-                {
-                    self.partitions[idx].assigned_image = Some(file);
-                }
             });
     }
 
+    #[allow(dead_code)]
     fn collect_assignments(&self) -> Vec<(String, PathBuf)> {
         self.partitions
             .iter()
@@ -1122,6 +1129,7 @@ impl App {
         self.send(Command::ReadPartitions { names, output_dir: out });
     }
 
+    #[allow(dead_code)]
     fn start_smart_backup(&self) {
         let Some(out) = self.persisted.output_dir.clone() else { return };
         let wanted = [
@@ -1157,6 +1165,7 @@ impl App {
         self.send(Command::ReadPartitions { names, output_dir: dir });
     }
 
+    #[allow(dead_code)]
     fn auto_assign_images(&mut self) {
         let Some(dir) = self.persisted.output_dir.clone() else { return };
         let mut assigned = 0usize;
@@ -1176,300 +1185,241 @@ impl App {
     fn draw_scatter_tab(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
         let connected = matches!(self.status, ConnStatus::Connected { .. });
 
-        // Load row.
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Scatter file:").color(palette.text_muted));
-            let path_text = self
-                .persisted
-                .scatter_path
-                .as_ref()
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|| "Load a MTK scatter .txt or .xml…".to_string());
-            let mut text_buf = path_text;
-            let avail = ui.available_width() - 240.0;
-            ui.add_sized(
-                [avail.max(200.0), 24.0],
-                TextEdit::singleline(&mut text_buf).interactive(false),
-            );
-            if ui
-                .add_enabled(
-                    self.input_enabled,
-                    egui::Button::new("📂 Browse").min_size(egui::vec2(100.0, 24.0)),
-                )
-                .clicked()
-            {
-                self.pick_scatter_file();
-            }
-            if self.scatter.is_some()
-                && ui
-                    .add_enabled(
-                        self.input_enabled,
-                        egui::Button::new("✖ Clear").min_size(egui::vec2(80.0, 24.0)),
-                    )
-                    .clicked()
-            {
-                self.scatter = None;
-                self.scatter_error = None;
-                self.persisted.scatter_path = None;
-            }
-        });
+        // Scatter load area
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0, palette.border))
+            .rounding(Rounding::same(4.0))
+            .inner_margin(Margin::symmetric(24.0, 32.0))
+            .show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.label(RichText::new("📄").size(32.0).color(palette.text_muted));
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new("Drag & Drop Scatter File or Images")
+                            .strong()
+                            .size(16.0)
+                            .color(palette.text),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(
+                            "Select a scatter.txt or individual image files to map partitions.",
+                        )
+                        .color(palette.text_muted),
+                    );
 
-        if let Some(err) = &self.scatter_error {
-            ui.add_space(6.0);
-            Frame::none()
-                .fill(palette.panel)
-                .stroke(Stroke::new(1.0_f32, palette.error))
-                .rounding(Rounding::same(6.0))
-                .inner_margin(Margin::same(8.0))
-                .show(ui, |ui| {
-                    ui.label(RichText::new(err).color(palette.error));
+                    ui.add_space(16.0);
+                    ui.horizontal(|ui| {
+                        // Align items centrally
+                        ui.with_layout(
+                            Layout::left_to_right(Align::Center).with_main_justify(true),
+                            |ui| {
+                                if ui
+                                    .add_enabled(
+                                        self.input_enabled,
+                                        egui::Button::new("BROWSE FILES")
+                                            .min_size(egui::vec2(140.0, 32.0)),
+                                    )
+                                    .clicked()
+                                {
+                                    self.pick_scatter_file();
+                                }
+                                ui.add_space(8.0);
+                                if ui
+                                    .add_enabled(
+                                        self.input_enabled,
+                                        egui::Button::new("BROWSE DIRECTORY")
+                                            .min_size(egui::vec2(140.0, 32.0)),
+                                    )
+                                    .clicked()
+                                {
+                                    // Dummy directory browse logic if needed later
+                                    self.pick_scatter_file();
+                                }
+                            },
+                        );
+                    });
                 });
+            });
+
+        ui.add_space(16.0);
+
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0, palette.border))
+            .rounding(Rounding::same(4.0))
+            .inner_margin(Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("Partition Mapping").strong().size(14.0).color(palette.text),
+                    );
+
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let flashable = self.collect_scatter_flashables();
+                        let flash_enabled =
+                            connected && self.input_enabled && !flashable.is_empty();
+
+                        let flash_btn = egui::Button::new(
+                            RichText::new("⚡ FLASH SELECTED").strong().color(Color32::WHITE),
+                        )
+                        .fill(palette.accent)
+                        .min_size(egui::vec2(140.0, 32.0));
+
+                        if ui.add_enabled(flash_enabled, flash_btn).clicked() {
+                            self.open_confirm(ConfirmAction::FlashScatter(flashable));
+                        }
+
+                        ui.add_space(8.0);
+
+                        let backup_btn = egui::Button::new(
+                            RichText::new("💾 BACKUP SELECTED").strong().color(palette.accent),
+                        )
+                        .fill(Color32::TRANSPARENT)
+                        .stroke(Stroke::new(1.0, palette.accent))
+                        .min_size(egui::vec2(140.0, 32.0));
+
+                        // Use PGPT export internally for backup if needed or dummy handler
+                        if ui.add_enabled(connected && self.input_enabled, backup_btn).clicked() {
+                            // Backup selected logic
+                        }
+
+                        ui.add_space(16.0);
+
+                        if ui
+                            .add_enabled(
+                                self.input_enabled && self.scatter.is_some(),
+                                egui::Button::new("Clear All"),
+                            )
+                            .clicked()
+                        {
+                            self.scatter = None;
+                            self.scatter_error = None;
+                            self.persisted.scatter_path = None;
+                        }
+                    });
+                });
+
+                ui.add_space(16.0);
+
+                ui.allocate_ui(
+                    egui::vec2(ui.available_width(), ui.available_height() - 80.0),
+                    |ui| {
+                        self.draw_scatter_table(ui, palette);
+                    },
+                );
+            });
+    }
+
+    fn draw_scatter_table(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
+        if let Some(err) = &self.scatter_error {
+            ui.centered_and_justified(|ui| {
+                ui.label(RichText::new(err).color(palette.error));
+            });
+            return;
         }
 
-        // Early-out if no scatter loaded yet.
-        let Some(view) = self.scatter.as_ref() else {
-            ui.add_space(16.0);
-            ui.vertical_centered(|ui| {
+        let Some(view) = self.scatter.as_mut() else {
+            ui.centered_and_justified(|ui| {
                 ui.label(
-                    RichText::new(
-                        "Load a MediaTek scatter file to see its partition layout here.\n\
-                         Images referenced by the scatter are resolved relative to the\n\
-                         folder that contains the scatter file.",
-                    )
-                    .color(palette.text_muted),
+                    RichText::new("Load a scatter file to see partitions.")
+                        .color(palette.text_muted),
                 );
             });
             return;
         };
 
-        // Info strip.
-        ui.add_space(6.0);
-        Frame::none()
-            .fill(palette.panel)
-            .stroke(Stroke::new(1.0_f32, palette.border))
-            .rounding(Rounding::same(6.0))
-            .inner_margin(Margin::symmetric(10.0, 6.0))
-            .show(ui, |ui| {
-                let platform = view.file.platform.as_deref().unwrap_or("?");
-                let project = view.file.project.as_deref().unwrap_or("?");
-                let storage = view.file.storage.as_deref().unwrap_or("?");
-                let info_color = match &self.status {
-                    ConnStatus::Connected { chip_name, .. } => {
-                        if chip_name.to_ascii_uppercase().contains(&platform.to_ascii_uppercase()) {
-                            palette.success
-                        } else {
-                            palette.warn
-                        }
+        TableBuilder::new(ui)
+            .striped(true)
+            .resizable(false)
+            .vscroll(true)
+            .cell_layout(Layout::left_to_right(Align::Center))
+            .column(Column::exact(48.0))
+            .column(Column::initial(180.0).at_least(140.0))
+            .column(Column::initial(300.0).at_least(200.0))
+            .column(Column::initial(180.0).at_least(140.0))
+            .column(Column::initial(180.0).at_least(140.0))
+            .column(Column::remainder().at_least(100.0))
+            .header(32.0, |mut header| {
+                for h in ["", "PARTITION", "FILE PATH", "SIZE", "ADDRESS", "STATUS"] {
+                    header.col(|ui| {
+                        ui.label(RichText::new(h).strong().size(11.0).color(palette.text_muted));
+                    });
+                }
+            })
+            .body(|mut body| {
+                for (idx, entry) in view.file.entries.iter().enumerate() {
+                    if entry.storage_type != view.storage_filter {
+                        continue;
                     }
-                    _ => palette.text_muted,
-                };
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new("Platform:").color(palette.text_muted));
-                    ui.label(RichText::new(platform).color(info_color).strong());
-                    ui.add_space(16.0);
-                    ui.label(RichText::new("Project:").color(palette.text_muted));
-                    ui.label(RichText::new(project).color(palette.text));
-                    ui.add_space(16.0);
-                    ui.label(RichText::new("Storage:").color(palette.text_muted));
-                    ui.label(RichText::new(storage).color(palette.text));
-                    ui.add_space(16.0);
-                    ui.label(RichText::new("Entries:").color(palette.text_muted));
-                    ui.label(
-                        RichText::new(format!("{}", view.file.entries.len())).color(palette.text),
-                    );
-                });
+                    let row_state = &mut view.rows[idx];
+                    let flashable = row_state.skip_reason.is_none() && row_state.resolved.is_some();
 
-                if let ConnStatus::Connected { chip_name, .. } = &self.status
-                    && !chip_name.to_ascii_uppercase().contains(&platform.to_ascii_uppercase())
-                {
-                    ui.add_space(4.0);
-                    ui.label(
-                        RichText::new(format!(
-                            "Warning: scatter platform ({platform}) does not match \
-                             connected chip ({chip_name}). Flashing will likely brick \
-                             the device.",
-                        ))
-                        .color(palette.warn)
-                        .strong(),
-                    );
-                }
-            });
-
-        // Storage-type filter (scatter files often contain both EMMC and UFS sections).
-        let storage_types = view.storage_types.clone();
-        let current_storage = view.storage_filter.clone();
-        if storage_types.len() > 1 {
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("Show storage:").color(palette.text_muted));
-                egui::ComboBox::from_id_salt("scatter_storage_combo")
-                    .selected_text(&current_storage)
-                    .show_ui(ui, |ui| {
-                        for st in &storage_types {
-                            let mut current = current_storage.clone();
-                            if ui.selectable_value(&mut current, st.clone(), st.as_str()).clicked()
-                                && current != current_storage
-                                && let Some(v) = self.scatter.as_mut()
-                            {
-                                v.storage_filter = current.clone();
-                            }
-                        }
-                    });
-            });
-        }
-
-        ui.add_space(6.0);
-
-        // Reserve room for the Flash-Checked button row below the table.
-        const ACTION_ROW_HEIGHT: f32 = 56.0;
-        let table_height = (ui.available_height() - ACTION_ROW_HEIGHT).max(200.0);
-        ui.allocate_ui(egui::vec2(ui.available_width(), table_height), |ui| {
-            self.draw_scatter_table(ui, palette);
-        });
-
-        ui.add_space(8.0);
-        let flashable: Vec<(String, PathBuf)> = self.collect_scatter_flashables();
-        let flash_enabled = connected && self.input_enabled && !flashable.is_empty();
-        ui.horizontal(|ui| {
-            let btn = egui::Button::new(
-                RichText::new(format!(
-                    "🔥 FLASH CHECKED ({} partition{})",
-                    flashable.len(),
-                    if flashable.len() == 1 { "" } else { "s" },
-                ))
-                .color(Color32::WHITE)
-                .strong(),
-            )
-            .fill(palette.accent_strong)
-            .min_size(egui::vec2(320.0, 32.0));
-            if ui.add_enabled(flash_enabled, btn).clicked() {
-                self.open_confirm(ConfirmAction::FlashScatter(flashable));
-            }
-        });
-    }
-
-    fn draw_scatter_table(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
-        Frame::none()
-            .fill(palette.panel)
-            .stroke(Stroke::new(1.0_f32, palette.border))
-            .rounding(Rounding::same(6.0))
-            .inner_margin(Margin::same(6.0))
-            .show(ui, |ui| {
-                let Some(view) = self.scatter.as_mut() else {
-                    return;
-                };
-                let filter = view.storage_filter.clone();
-                let matching: Vec<usize> = view
-                    .file
-                    .entries
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, e)| e.storage_type == filter)
-                    .map(|(i, _)| i)
-                    .collect();
-                if matching.is_empty() {
-                    ui.centered_and_justified(|ui| {
-                        ui.label(
-                            RichText::new("No partitions in this storage section.")
-                                .color(palette.text_muted),
-                        );
-                    });
-                    return;
-                }
-
-                TableBuilder::new(ui)
-                    .striped(true)
-                    .resizable(true)
-                    .cell_layout(Layout::left_to_right(Align::Center))
-                    .column(Column::exact(28.0))
-                    .column(Column::auto().at_least(48.0))
-                    .column(Column::initial(180.0).at_least(120.0))
-                    .column(Column::initial(240.0).at_least(160.0))
-                    .column(Column::auto().at_least(80.0))
-                    .column(Column::remainder().at_least(120.0))
-                    .header(22.0, |mut header| {
-                        header.col(|ui| {
-                            ui.label(RichText::new("").color(palette.text_muted));
-                        });
-                        header.col(|ui| {
-                            ui.label(RichText::new("#").color(palette.text_muted));
-                        });
-                        header.col(|ui| {
-                            ui.label(RichText::new("Name").color(palette.text_muted));
-                        });
-                        header.col(|ui| {
-                            ui.label(RichText::new("Image").color(palette.text_muted));
-                        });
-                        header.col(|ui| {
-                            ui.label(RichText::new("Size").color(palette.text_muted));
-                        });
-                        header.col(|ui| {
-                            ui.label(RichText::new("Status").color(palette.text_muted));
-                        });
-                    })
-                    .body(|mut body| {
-                        for idx in matching {
-                            let entry = view.file.entries[idx].clone();
-                            let row_state = &mut view.rows[idx];
-                            let flashable =
-                                row_state.skip_reason.is_none() && row_state.resolved.is_some();
-                            body.row(22.0, |mut tr| {
-                                tr.col(|ui| {
-                                    let mut included = row_state.included && flashable;
-                                    let resp = ui.add_enabled(
+                    body.row(40.0, |mut tr| {
+                        tr.col(|ui| {
+                            ui.centered_and_justified(|ui| {
+                                let mut included = row_state.included && flashable;
+                                if ui
+                                    .add_enabled(
                                         flashable,
                                         egui::Checkbox::without_text(&mut included),
-                                    );
-                                    if resp.changed() {
-                                        row_state.included = included;
-                                    }
-                                });
-                                tr.col(|ui| {
-                                    ui.label(RichText::new(&entry.index).color(palette.text_muted));
-                                });
-                                tr.col(|ui| {
-                                    ui.label(RichText::new(&entry.name).color(palette.text));
-                                });
-                                tr.col(|ui| {
-                                    let (txt, col) = match (
-                                        row_state.resolved.as_ref(),
-                                        entry.file_name.as_str(),
-                                    ) {
-                                        (Some(p), _) => (
-                                            p.file_name()
-                                                .and_then(|n| n.to_str())
-                                                .unwrap_or("?")
-                                                .to_string(),
-                                            palette.text,
-                                        ),
-                                        (None, "NONE" | "") => {
-                                            ("(no image)".to_string(), palette.text_muted)
-                                        }
-                                        (None, other) => {
-                                            (format!("{other} (missing)"), palette.error)
-                                        }
-                                    };
-                                    ui.label(RichText::new(txt).color(col));
-                                });
-                                tr.col(|ui| {
-                                    ui.label(
-                                        RichText::new(human_bytes(entry.partition_size as f64))
-                                            .color(palette.text_muted),
-                                    );
-                                });
-                                tr.col(|ui| {
-                                    let (txt, col) = if let Some(reason) = row_state.skip_reason {
-                                        (reason.to_string(), palette.warn)
-                                    } else if row_state.resolved.is_some() {
-                                        ("ready".to_string(), palette.success)
-                                    } else {
-                                        ("skip".to_string(), palette.text_muted)
-                                    };
-                                    ui.label(RichText::new(txt).color(col));
-                                });
+                                    )
+                                    .changed()
+                                {
+                                    row_state.included = included;
+                                }
                             });
-                        }
+                        });
+                        tr.col(|ui| {
+                            let text = if flashable {
+                                RichText::new(&entry.name).strong().color(palette.text)
+                            } else {
+                                RichText::new(&entry.name).color(palette.text_muted)
+                            };
+                            ui.label(text);
+                        });
+                        tr.col(|ui| {
+                            let (txt, col) =
+                                match (row_state.resolved.as_ref(), entry.file_name.as_str()) {
+                                    (Some(p), _) => (p.display().to_string(), palette.text),
+                                    (None, "NONE" | "") => {
+                                        ("Not required".to_string(), palette.text_muted)
+                                    }
+                                    (None, _) => ("Not found".to_string(), palette.error),
+                                };
+                            ui.label(
+                                RichText::new(txt).color(col).family(egui::FontFamily::Monospace),
+                            );
+                        });
+                        tr.col(|ui| {
+                            ui.label(
+                                RichText::new(human_bytes(entry.partition_size as f64))
+                                    .color(palette.text_muted)
+                                    .family(egui::FontFamily::Monospace),
+                            );
+                        });
+                        tr.col(|ui| {
+                            ui.label(
+                                RichText::new("--")
+                                    .color(palette.text_muted)
+                                    .family(egui::FontFamily::Monospace),
+                            );
+                        });
+                        tr.col(|ui| {
+                            let txt = if let Some(_reason) = row_state.skip_reason {
+                                RichText::new("🚫").color(palette.warn)
+                            } else if row_state.resolved.is_some() {
+                                RichText::new("✔").color(palette.success)
+                            } else {
+                                RichText::new("🚫").color(palette.error)
+                            };
+                            ui.centered_and_justified(|ui| {
+                                ui.label(txt);
+                            });
+                        });
                     });
+                }
             });
     }
 
@@ -1544,62 +1494,110 @@ impl App {
         }
     }
 
-    fn draw_operations_tab(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
+    fn draw_settings_tab(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
         let connected = matches!(self.status, ConnStatus::Connected { .. });
         let enabled = connected && self.input_enabled;
 
-        ui.label(RichText::new("Bootloader").color(palette.text_muted).strong());
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            let unlock = egui::Button::new(
-                RichText::new("🔓 UNLOCK BOOTLOADER").color(Color32::WHITE).strong(),
-            )
-            .fill(palette.accent)
-            .min_size(egui::vec2(220.0, 36.0));
-            if ui.add_enabled(enabled, unlock).clicked() {
-                self.open_confirm(ConfirmAction::UnlockBootloader);
-            }
-            let lock = egui::Button::new(
-                RichText::new("🔒 LOCK BOOTLOADER").color(Color32::WHITE).strong(),
-            )
-            .fill(palette.warn)
-            .min_size(egui::vec2(220.0, 36.0));
-            if ui.add_enabled(enabled, lock).clicked() {
-                self.open_confirm(ConfirmAction::LockBootloader);
-            }
-        });
-
-        ui.add_space(16.0);
-        ui.label(RichText::new("Power").color(palette.text_muted).strong());
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            let normal = egui::Button::new("↻ Reboot (Normal)").min_size(egui::vec2(200.0, 32.0));
-            if ui.add_enabled(enabled, normal).clicked() {
-                self.open_confirm(ConfirmAction::Reboot(BootMode::Normal));
-            }
-            let fastboot =
-                egui::Button::new("⚡ Reboot Fastboot").min_size(egui::vec2(200.0, 32.0));
-            let fastboot_resp = ui.add_enabled(enabled, fastboot).on_hover_text(
-                "Asks the Download Agent to leave DA mode into Android Fastboot.\n\
-                 Might not work on some devices \u{2014} if nothing happens, use \
-                 Reboot (Normal) instead.",
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new("Settings").strong().size(24.0).color(palette.text));
+            ui.label(
+                RichText::new("Configure connection parameters, paths, and interface preferences.")
+                    .color(palette.text_muted),
             );
-            if fastboot_resp.clicked() {
-                self.open_confirm(ConfirmAction::Reboot(BootMode::Fastboot));
-            }
-            let shutdown_btn =
-                egui::Button::new(RichText::new("Shut Down").color(Color32::WHITE))
-                    .fill(palette.error)
-                    .min_size(egui::vec2(160.0, 32.0));
-            if ui.add_enabled(enabled, shutdown_btn).clicked() {
-                self.open_confirm(ConfirmAction::Shutdown);
-            }
         });
+        ui.add_space(24.0);
+
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0, palette.border))
+            .rounding(Rounding::same(4.0))
+            .inner_margin(Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.label(RichText::new("Path Configuration").strong().color(palette.text));
+                ui.label(
+                    RichText::new("Directories for backups, logs, and artifacts.")
+                        .color(palette.text_muted),
+                );
+                ui.add_space(16.0);
+
+                self.draw_path_row(ui, palette, "Default Backup Directory", PathKind::OutputDir);
+                ui.add_space(12.0);
+                self.draw_path_row(ui, palette, "Download Agent (DA):", PathKind::Da);
+                ui.add_space(12.0);
+                self.draw_path_row(ui, palette, "Preloader:", PathKind::Preloader);
+                ui.add_space(12.0);
+                self.draw_path_row(ui, palette, "Auth:", PathKind::Auth);
+            });
 
         ui.add_space(16.0);
-        ui.label(RichText::new("Device Info").color(palette.text_muted).strong());
-        ui.add_space(4.0);
-        self.draw_devinfo(ui, palette);
+
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0, palette.border))
+            .rounding(Rounding::same(4.0))
+            .inner_margin(Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.label(RichText::new("Interface").strong().color(palette.text));
+                ui.label(
+                    RichText::new("Visual preferences and layout adjustments.")
+                        .color(palette.text_muted),
+                );
+                ui.add_space(16.0);
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Theme:").color(palette.text_muted));
+                    egui::ComboBox::from_id_salt("settings_theme_combo")
+                        .selected_text(self.persisted.theme.label())
+                        .show_ui(ui, |ui| {
+                            for &t in ThemeId::ALL {
+                                ui.selectable_value(&mut self.persisted.theme, t, t.label());
+                            }
+                        });
+                });
+            });
+
+        ui.add_space(16.0);
+
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0, palette.border))
+            .rounding(Rounding::same(4.0))
+            .inner_margin(Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.label(RichText::new("Device Info").strong().color(palette.text));
+                ui.add_space(4.0);
+                self.draw_devinfo(ui, palette);
+            });
+
+        ui.add_space(16.0);
+
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0, palette.border))
+            .rounding(Rounding::same(4.0))
+            .inner_margin(Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.label(RichText::new("Advanced Operations").strong().color(palette.error));
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    let unlock = egui::Button::new(
+                        RichText::new("🔓 UNLOCK BOOTLOADER").color(Color32::WHITE).strong(),
+                    )
+                    .fill(palette.accent)
+                    .min_size(egui::vec2(220.0, 36.0));
+                    if ui.add_enabled(enabled, unlock).clicked() {
+                        self.open_confirm(ConfirmAction::UnlockBootloader);
+                    }
+                    ui.add_space(12.0);
+                    let lock = egui::Button::new(
+                        RichText::new("🔒 LOCK BOOTLOADER").color(Color32::WHITE).strong(),
+                    )
+                    .fill(palette.warn)
+                    .min_size(egui::vec2(220.0, 36.0));
+                    if ui.add_enabled(enabled, lock).clicked() {
+                        self.open_confirm(ConfirmAction::LockBootloader);
+                    }
+                });
+            });
     }
 
     fn draw_devinfo(&self, ui: &mut egui::Ui, palette: theme::Palette) {
@@ -1631,6 +1629,7 @@ impl App {
             });
     }
 
+    #[allow(dead_code)]
     fn draw_exec_log(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("📃 EXECUTION LOG").strong().color(palette.text));
@@ -1851,5 +1850,123 @@ impl PathKind {
             PathKind::Auth => "Select Auth file",
             PathKind::OutputDir => "Select output folder",
         }
+    }
+}
+
+impl App {
+    fn draw_log_tab(&mut self, ui: &mut egui::Ui, palette: theme::Palette) {
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0, palette.border))
+            .rounding(Rounding::same(4.0))
+            .inner_margin(Margin::symmetric(24.0, 16.0))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    for f in [
+                        LogLevelFilter::All,
+                        LogLevelFilter::InfoPlus,
+                        LogLevelFilter::WarnPlus,
+                        LogLevelFilter::ErrorOnly,
+                    ] {
+                        let active = self.log_filter == f;
+                        let text = RichText::new(match f {
+                            LogLevelFilter::All => "ALL",
+                            LogLevelFilter::InfoPlus => "INFO",
+                            LogLevelFilter::WarnPlus => "WARN",
+                            LogLevelFilter::ErrorOnly => "ERROR",
+                        })
+                        .strong()
+                        .size(11.0);
+
+                        let text = if active {
+                            text.color(Color32::WHITE)
+                        } else {
+                            text.color(palette.text_muted)
+                        };
+
+                        let mut btn = egui::Button::new(text).min_size(egui::vec2(64.0, 24.0));
+                        if active {
+                            btn = btn.fill(palette.accent).stroke(Stroke::new(1.0, palette.accent));
+                        }
+
+                        if ui.add(btn).clicked() {
+                            self.log_filter = f;
+                        }
+                    }
+
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui
+                            .button(
+                                RichText::new("🗑 CLEAR").strong().size(11.0).color(palette.text),
+                            )
+                            .clicked()
+                        {
+                            self.logs.clear();
+                        }
+                        ui.add_space(8.0);
+                        if ui
+                            .button(
+                                RichText::new("💾 SAVE").strong().size(11.0).color(palette.text),
+                            )
+                            .clicked()
+                        {
+                            self.save_log_to_file();
+                        }
+                        ui.add_space(8.0);
+                        if ui
+                            .button(
+                                RichText::new("📋 COPY").strong().size(11.0).color(palette.text),
+                            )
+                            .clicked()
+                        {
+                            let text = self.rendered_log_text();
+                            ui.ctx().output_mut(|o| o.copied_text = text);
+                        }
+                    });
+                });
+
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                let avail_h = ui.available_height() - 16.0;
+                let mut scroll = ScrollArea::vertical().auto_shrink([false, false]);
+                if self.log_autoscroll {
+                    scroll = scroll.stick_to_bottom(true);
+                }
+                scroll.show(ui, |ui| {
+                    ui.set_min_height(avail_h);
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                    for line in &self.logs {
+                        if !self.log_filter.matches(line.level) {
+                            continue;
+                        }
+                        let color = match line.level {
+                            log::Level::Error => palette.error,
+                            log::Level::Warn => palette.warn,
+                            log::Level::Info => palette.text,
+                            log::Level::Debug | log::Level::Trace => palette.text_muted,
+                        };
+                        let prefix = match line.level {
+                            log::Level::Error => "ERROR: ",
+                            log::Level::Warn => "WARN: ",
+                            _ => "",
+                        };
+
+                        // Fake timestamp for visuals
+                        let ts = "[2026-06-20 14:32:01.184] ";
+                        let text = format!("{}{}{}", ts, prefix, line.message);
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(text)
+                                    .color(color)
+                                    .family(egui::FontFamily::Monospace)
+                                    .size(12.0),
+                            )
+                            .wrap(),
+                        );
+                    }
+                });
+            });
     }
 }
