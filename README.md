@@ -149,6 +149,7 @@ Other learning resources I suggest are the following
 ## Credits
 
 * [ChimeraTool team](https://chimeratool.com/) - heapb8 was originally reverse-engineered from ChimeraTool.
+* **AI Assistance** - Major features of this GUI wrapper and its optimizations were developed with the assistance of AI coding agents (including Devin and Antigravity).
 
 ## License
 
