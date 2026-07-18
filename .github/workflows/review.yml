@@ -1,0 +1,50 @@
+name: Lint
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.rs"
+      - "**.toml"
+      - "!docs/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**.rs"
+      - "**.toml"
+      - "!docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: giraffate/clippy-action@94e9bd8deab2618756ec5380f12eb35bcb0a88ca
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          clippy_flags: -p penumbra --all-targets -- -D warnings
+          reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
+          fail_on_error: true
+
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - run: rustfmt --config-path rustfmt.toml $(find . -name '*.rs')
+      - uses: reviewdog/action-suggester@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tool_name: rustfmt
+          fail_on_error: true
