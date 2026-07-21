@@ -394,7 +394,7 @@ fn run(cmd_rx: Receiver<Command>, evt_tx: Sender<Event>, cancel: Arc<AtomicBool>
 }
 
 fn drain_pending(rx: &Receiver<Command>) {
-    while let Ok(_cmd) = rx.try_recv() {
+    while rx.try_recv().is_ok() {
         // Intentionally drop pending commands.
     }
 }

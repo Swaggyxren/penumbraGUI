@@ -29,12 +29,18 @@ use crate::messages::{Event, LogLine};
 
 fn main() -> Result<()> {
     let (log_tx, log_rx) = mpsc::channel::<LogLine>();
-    let _ = log_bridge::init(log_tx, std::env::var("PENUMBRA_VERBOSE").is_ok());
+    let verbose = std::env::var("PENUMBRA_VERBOSE").is_ok();
+    let _ = log_bridge::init(log_tx, verbose);
+
+    // Print the log file location to stderr so it's visible in a terminal
+    // and in systemd journal even on release builds.
+    eprintln!("[penumbra-gui] session log: {}", log_bridge::log_file_path().display());
 
     let (evt_tx, evt_rx) = mpsc::channel::<Event>();
     let handle = worker::spawn(evt_tx);
 
     let viewport = ViewportBuilder::default()
+        .with_maximized(true)
         .with_inner_size([1280.0, 800.0])
         .with_min_inner_size([960.0, 600.0])
         .with_title("Penumbra Flash Tool");

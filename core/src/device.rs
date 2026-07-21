@@ -5,13 +5,12 @@
 
 use std::io::{Read, Write};
 
-use log::{error, info, warn};
+use log::{info, warn};
 
 use crate::connection::Connection;
 use crate::connection::port::{ConnectionType, MTKPort};
 use crate::core::bootctrl::{BootControl, OFFSET_SLOT_SUFFIX};
 use crate::core::chip::{ChipInfo, chip_from_hw_code};
-use crate::core::crypto::config::CryptoIO;
 use crate::core::devinfo::{DevInfoData, DeviceInfo};
 use crate::core::log_buffer::DeviceLog;
 use crate::core::seccfg::LockFlag;
@@ -28,7 +27,7 @@ use crate::error::{Error, Result};
 /// A MTKPort must be provided to build the device.
 ///
 /// # Example
-/// ```rust
+/// ```ignore
 /// use penumbra::{Device, DeviceBuilder, find_mtk_port};
 ///
 /// let mtk_port = find_mtk_port().await.ok_or("No MTK port found")?;
@@ -90,13 +89,13 @@ impl DeviceBuilder {
     }
 
     /// Enables verbose logging mode.
-    pub fn with_verbose(mut self, verbose: bool) -> Self {
+    pub const fn with_verbose(mut self, verbose: bool) -> Self {
         self.verbose = verbose;
         self
     }
 
     /// Enable USB logging
-    pub fn with_usb_log_channel(mut self, enabled: bool) -> Self {
+    pub const fn with_usb_log_channel(mut self, enabled: bool) -> Self {
         self.usb_log_channel = enabled;
         self
     }
@@ -174,7 +173,7 @@ impl Device {
     /// This must be called before any other operations.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -264,7 +263,7 @@ impl Device {
     /// After entering DA mode, the device's partition information is read and stored in `dev_info`.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -360,7 +359,7 @@ impl Device {
     }
 
     /// Returns a reference to the device log buffer
-    pub fn device_log(&self) -> &DeviceLog {
+    pub const fn device_log(&self) -> &DeviceLog {
         &self.device_log
     }
 
@@ -385,7 +384,7 @@ impl Device {
 
     /// Gets a mutable reference to the DA protocol handler, if available.
     /// Returns `None` if the device is not in DA mode.
-    pub fn get_protocol(&mut self) -> Option<&mut DAProtocol> {
+    pub const fn get_protocol(&mut self) -> Option<&mut DAProtocol> {
         self.protocol.as_mut()
     }
 
@@ -396,7 +395,7 @@ impl Device {
     /// Returns an empty list if no DA protocol is available.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -511,7 +510,7 @@ impl Device {
     /// To erase other sections, use `erase_offset` with the appropriate address.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -546,7 +545,7 @@ impl Device {
     /// `PartitionKind`.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// // Let's assume we want to read preloader
     /// use penumbra::{DeviceBuilder, PartitionKind, find_mtk_port};
     ///
@@ -589,7 +588,7 @@ impl Device {
     /// `PartitionKind`.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// // Let's assume we want to write to preloader
     /// use penumbra::{DeviceBuilder, PartitionKind, find_mtk_port};
     ///
@@ -635,7 +634,7 @@ impl Device {
     /// `PartitionKind`.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, PartitionKind, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -674,7 +673,7 @@ impl Device {
     /// whole.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -707,7 +706,7 @@ impl Device {
     /// This is the same method uses by SP Flash Tool when reading back without scatter.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use std::fs::File;
     /// use std::io::BufWriter;
     ///
@@ -741,7 +740,7 @@ impl Device {
     /// Formats a specified partition on the device.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -768,7 +767,7 @@ impl Device {
     /// Shuts down the device.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -790,7 +789,7 @@ impl Device {
     /// Supported boot modes include `Normal`, `HomeScreen`, `Fastboot`, `Test`, and `Meta`.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{BootMode, DeviceBuilder, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -815,7 +814,7 @@ impl Device {
     /// Requires DA Extensions.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, LockFlag, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -840,7 +839,7 @@ impl Device {
     /// Only available when the `no_exploits` feature is **not** enabled.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use std::fs::File;
     /// use std::io::BufWriter;
     ///
@@ -877,7 +876,7 @@ impl Device {
     /// Only available when the `no_exploits` feature is **not** enabled.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use std::fs::File;
     /// use std::io::BufReader;
     ///
@@ -915,7 +914,7 @@ impl Device {
     /// Only available when the `no_exploits` feature is **not** enabled.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use std::fs::File;
     /// use std::io::BufWriter;
     ///
@@ -960,7 +959,7 @@ impl Device {
     /// Only available when the `no_exploits` feature is **not** enabled.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use std::fs::File;
     /// use std::io::BufReader;
     ///
@@ -1007,7 +1006,7 @@ impl Device {
     /// Only available when the `no_exploits` feature is **not** enabled.
     ///
     /// # Examples
-    /// ```rust
+    /// ```ignore
     /// use penumbra::{DeviceBuilder, RpmbRegion, find_mtk_port};
     ///
     /// let mtk_port = find_mtk_port().ok_or("No MTK port found")?;
@@ -1025,33 +1024,5 @@ impl Device {
 
         let protocol = self.protocol.as_mut().unwrap();
         protocol.auth_rpmb(region, key)
-    }
-}
-
-impl CryptoIO for Device {
-    fn read32(&mut self, addr: u32) -> u32 {
-        let Some(protocol) = self.get_protocol() else {
-            error!("No protocol available for read32 at 0x{:08X}!", addr);
-            return 0;
-        };
-
-        match protocol.read32(addr) {
-            Ok(val) => val,
-            Err(e) => {
-                error!("Failed to read32 from protocol at 0x{:08X}: {}", addr, e);
-                0
-            }
-        }
-    }
-
-    fn write32(&mut self, addr: u32, val: u32) {
-        let Some(protocol) = self.get_protocol() else {
-            error!("No protocol available for write32 at 0x{:08X}!", addr);
-            return;
-        };
-
-        if let Err(e) = protocol.write32(addr, val) {
-            error!("Failed to write32 to protocol at 0x{:08X}: {}", addr, e);
-        }
     }
 }

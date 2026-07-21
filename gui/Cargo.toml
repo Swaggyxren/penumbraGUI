@@ -17,6 +17,7 @@ log = "0.4"
 anyhow = "1"
 human_bytes = "0.4"
 serde = { version = "1", features = ["derive"] }
+dirs-next = "2"
 
 [[bin]]
 name = "penumbra-gui"
