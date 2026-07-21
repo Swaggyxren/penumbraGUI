@@ -4,13 +4,17 @@
 */
 
 //! A `log::Log` adapter that forwards every log record to an `mpsc::Sender`
-//! so the GUI can render it in the execution log pane.
+//! so the GUI can render it in the execution log pane, and simultaneously
+//! writes every record to a rotating log file on disk for post-mortem debugging.
 //!
 //! A minimal "target=level[,...]" parser is used to honour the `RUST_LOG`
 //! environment variable without pulling in the private `env_logger::filter`
 //! module (which was made pub(crate) in env_logger 0.11).
 
 use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::mpsc::Sender;
 
@@ -18,9 +22,34 @@ use log::{LevelFilter, Log, Metadata, Record, SetLoggerError};
 
 use crate::messages::LogLine;
 
-/// Sink that delivers log records into the GUI's event channel.
+/// Returns the path where the session log file will be written.
+///
+/// Preference order:
+/// 1. `$PENUMBRA_LOG_DIR` env var
+/// 2. `$XDG_STATE_HOME/penumbra-gui/` (Linux standard)
+/// 3. `$HOME/.local/state/penumbra-gui/`
+/// 4. Current working directory as a last resort
+pub fn log_file_path() -> PathBuf {
+    let dir = std::env::var_os("PENUMBRA_LOG_DIR")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("XDG_STATE_HOME")
+                .map(|d| PathBuf::from(d).join("penumbra-gui"))
+        })
+        .or_else(|| {
+            dirs_next::home_dir().map(|h| h.join(".local/state/penumbra-gui"))
+        })
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    std::fs::create_dir_all(&dir).ok();
+    dir.join("penumbra-gui.log")
+}
+
+/// Sink that delivers log records into the GUI's event channel and a log file.
 pub struct ChannelLogger {
     sender: Mutex<Sender<LogLine>>,
+    /// Buffered file sink. `None` if the log file could not be opened.
+    file: Option<Mutex<File>>,
     default: LevelFilter,
     per_target: HashMap<String, LevelFilter>,
 }
@@ -66,7 +95,34 @@ impl ChannelLogger {
             per_target.entry((*tgt).to_string()).or_insert(LevelFilter::Warn);
         }
 
-        Self { sender: Mutex::new(sender), default, per_target }
+        // Open (or create) the session log file, truncating any previous run.
+        let path = log_file_path();
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&path)
+            .ok()
+            .map(Mutex::new);
+
+        // Write a header so it's easy to tell sessions apart.
+        if let Some(f) = &file {
+            if let Ok(mut guard) = f.lock() {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let _ = writeln!(
+                    guard,
+                    "=== penumbra-gui {} — session started (unix={}) ===",
+                    env!("CARGO_PKG_VERSION"),
+                    now,
+                );
+                let _ = writeln!(guard, "=== log file: {} ===", path.display());
+            }
+        }
+
+        Self { sender: Mutex::new(sender), file, default, per_target }
     }
 
     fn level_for(&self, target: &str) -> LevelFilter {
@@ -94,18 +150,44 @@ impl Log for ChannelLogger {
             return;
         }
 
+        let message = format!("{}", record.args());
+
+        // Write to the file sink first (always, regardless of GUI state).
+        if let Some(f) = &self.file {
+            if let Ok(mut guard) = f.lock() {
+                // Simple timestamp: seconds since epoch (no extra deps).
+                let secs = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let _ = writeln!(
+                    guard,
+                    "[{secs}] [{level:<5}] [{target}] {message}",
+                    level  = record.level(),
+                    target = record.target(),
+                );
+            }
+        }
+
+        // Forward to the GUI channel.
         let line = LogLine {
             level: record.level(),
             target: record.target().to_string(),
-            message: format!("{}", record.args()),
+            message,
         };
-
         if let Ok(tx) = self.sender.lock() {
             let _ = tx.send(line);
         }
     }
 
-    fn flush(&self) {}
+    fn flush(&self) {
+        // fsync the file so nothing is lost on a hard crash.
+        if let Some(f) = &self.file {
+            if let Ok(guard) = f.lock() {
+                let _ = guard.sync_all();
+            }
+        }
+    }
 }
 
 /// Install a global channel logger that emits into `sender`.
