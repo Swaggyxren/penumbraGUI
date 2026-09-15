@@ -1,21 +1,15 @@
 /*
     SPDX-License-Identifier: AGPL-3.0-or-later
-    SPDX-FileCopyrightText: 2026 Shomy
+    SPDX-FileCopyrightText: 2026 Shomy, Penumbra Contributors
 */
 
 //! Entry point for the Penumbra GUI.
-//!
-//! On Windows, release builds use the `windows` subsystem so a console window
-//! does not flash up. Debug builds and non-Windows builds keep the default
-//! subsystem so `log` output goes to the terminal.
 
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 mod app;
-mod error_format;
 mod log_bridge;
 mod messages;
-mod scatter;
 mod theme;
 mod worker;
 
@@ -32,23 +26,23 @@ fn main() -> Result<()> {
     let verbose = std::env::var("PENUMBRA_VERBOSE").is_ok();
     let _ = log_bridge::init(log_tx, verbose);
 
-    // Print the log file location to stderr so it's visible in a terminal
-    // and in systemd journal even on release builds.
     eprintln!("[penumbra-gui] session log: {}", log_bridge::log_file_path().display());
 
     let (evt_tx, evt_rx) = mpsc::channel::<Event>();
     let handle = worker::spawn(evt_tx);
 
     let viewport = ViewportBuilder::default()
-        .with_maximized(true)
-        .with_inner_size([1280.0, 800.0])
-        .with_min_inner_size([960.0, 600.0])
-        .with_title("Penumbra Flash Tool");
+        .with_inner_size([1120.0, 740.0])
+        .with_min_inner_size([920.0, 600.0])
+        .with_title("Penumbra Flasher");
 
-    let native_options = NativeOptions { viewport, ..Default::default() };
+    let native_options = NativeOptions {
+        viewport,
+        ..Default::default()
+    };
 
     eframe::run_native(
-        "Penumbra Flash Tool",
+        "Penumbra Flasher",
         native_options,
         Box::new(move |cc| Ok(Box::new(app::App::new(cc, handle, evt_rx, log_rx)))),
     )

@@ -24,7 +24,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@nightly
 
@@ -37,13 +37,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libudev-dev
+          sudo apt-get install -y pkg-config libudev-dev libwayland-dev libxkbcommon-dev libgl1-mesa-dev
 
       - name: Build nightly binaries
         run: cargo build --workspace --profile nightly
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: antumbra-nightly-${{ runner.os }}-${{ steps.vars.outputs.sha_short }}
           path: |
