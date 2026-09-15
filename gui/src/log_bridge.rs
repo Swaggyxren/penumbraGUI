@@ -95,12 +95,17 @@ impl ChannelLogger {
             per_target.entry((*tgt).to_string()).or_insert(LevelFilter::Warn);
         }
 
-        // Open (or create) the session log file, truncating any previous run.
+        // Default core penumbra and gui loggers to Debug so hardware and handshake details are preserved
+        per_target.entry("penumbra".to_string()).or_insert(LevelFilter::Debug);
+        per_target.entry("penumbra_mtk".to_string()).or_insert(LevelFilter::Debug);
+        per_target.entry("penumbra_gui".to_string()).or_insert(LevelFilter::Debug);
+
+        // Open (or create) the session log file in append mode.
         let path = log_file_path();
         let file = OpenOptions::new()
             .create(true)
             .write(true)
-            .truncate(true)
+            .append(true)
             .open(&path)
             .ok()
             .map(Mutex::new);
@@ -114,11 +119,12 @@ impl ChannelLogger {
                     .unwrap_or(0);
                 let _ = writeln!(
                     guard,
-                    "=== penumbra-gui {} — session started (unix={}) ===",
+                    "\n=== penumbra-gui {} — session started (unix={}) ===",
                     env!("CARGO_PKG_VERSION"),
                     now,
                 );
                 let _ = writeln!(guard, "=== log file: {} ===", path.display());
+                let _ = guard.flush();
             }
         }
 
@@ -166,6 +172,7 @@ impl Log for ChannelLogger {
                     level  = record.level(),
                     target = record.target(),
                 );
+                let _ = guard.flush();
             }
         }
 
