@@ -12,6 +12,11 @@ assignees: shomykohai
 - What was the expected behaviour?
 - What happened instead?
 
+MAKE SURE TO HAVE READ THE FAQ BEFORE OPENING A BUG REPORT.
+ISSUES THAT CAN BE ANSWERED BY THE FAQ WILL BE CLOSED WITHOUT FURTHER NOTICE.
+
+https://penumbra.itssho.my/Penumbra/FAQ
+
  -->
 
 ## Information

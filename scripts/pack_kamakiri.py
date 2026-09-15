@@ -7,7 +7,7 @@ import csv
 import struct
 from typing import Final
 
-MAGIC: Final[bytes] = b"PENUMBRAKK" + bytes([0] * 2)
+MAGIC: Final[bytes] = b"PENUMBRALC" + bytes([0] * 2)
 
 
 def parse_csv(input_file: str) -> dict:
@@ -20,11 +20,13 @@ def parse_csv(input_file: str) -> dict:
             wdt = row["wdt"]
             ptr_usbdl = row["ptr_usbdl"]
             ptr_da = row["ptr_da"]
+            cert_addr = row["cert_addr"]
             data[hwcode] = {
                 "name": name,
                 "wdt": wdt,
                 "ptr_usbdl": ptr_usbdl,
                 "ptr_da": ptr_da,
+                "cert_addr": cert_addr,
             }
     return data
 
@@ -32,7 +34,7 @@ def parse_csv(input_file: str) -> dict:
 def pack_kamakiri(data: dict, payload_file: str, output_file: str) -> None:
     header_format = "<12s3I"  # Magic (12 bytes) + Number of entries (4 bytes) + Payload offset (4 bytes) + Payload length (4 bytes)
 
-    entries_format = "<4I"
+    entries_format = "<5I"
 
     entries = []
     for hw, info in data.items():
@@ -40,8 +42,11 @@ def pack_kamakiri(data: dict, payload_file: str, output_file: str) -> None:
         wdt = int(info["wdt"], 16)
         ptr_usbdl = int(info["ptr_usbdl"], 16)
         ptr_da = int(info["ptr_da"], 16)
+        cert_addr = int(info["cert_addr"], 16)
 
-        entries.append(struct.pack(entries_format, hwcode, wdt, ptr_usbdl, ptr_da))
+        entries.append(
+            struct.pack(entries_format, hwcode, wdt, ptr_usbdl, ptr_da, cert_addr)
+        )
 
     with open(payload_file, "rb") as f:
         payload = f.read()
@@ -62,8 +67,8 @@ def pack_kamakiri(data: dict, payload_file: str, output_file: str) -> None:
                 payload_length,
             )
         )
-        for entry in entries:
-            f.write(entry)
+
+        f.writelines(entries)
         f.write(payload)
 
 

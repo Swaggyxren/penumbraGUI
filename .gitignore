@@ -49,3 +49,7 @@ scripts/*.bin
 scripts/*.sig
 scripts/*.img
 .antumbra_state
+
+/vendor
+/.cargo
+result

@@ -1,6 +1,6 @@
 # PKGBUILD by hexman1999 (https://github.com/hexman1999)
 pkgname=antumbra-git
-pkgver=1.1.0.r64.gadc4dec
+pkgver=2.0.0.r64.gadc4dec
 pkgrel=1
 pkgdesc="🌘 MTK flash tool written in rust"
 arch=('x86_64' 'aarch64')
@@ -15,12 +15,7 @@ conflicts=("${pkgname%-git}")
 source=("penumbra::git+https://github.com/shomykohai/penumbra.git")
 sha256sums=('SKIP')
 
-
-# TUI
-# Set to 'true' to build the TUI, 'false' for CLI only.
-# Note: The TUI is currently impossible to build due to ongoing
-# refactoring, so don't set this to true yet.
-_build_tui=false
+_build_tui=true
 
 pkgver() {
   cd "$srcdir/penumbra"

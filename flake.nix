@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05-small";
     naersk.url = "github:nix-community/naersk";
     rust-overlay.url = "github:oxalica/rust-overlay";
   };
@@ -27,8 +27,22 @@
       src = ./.;
       cargoLock = ./Cargo.lock;
       buildInputs = [pkgs.glib pkgs.systemd.dev];
-      nativeBuildInputs = [pkgs.pkg-config];
+      nativeBuildInputs = [pkgs.pkg-config pkgs.copyDesktopItems];
       pname = "antumbra";
+
+      postInstall = ''
+        install -Dm644 tui/res/common/icon.svg $out/share/icons/hicolor/scalable/apps/antumbra.svg
+      '';
+
+      desktopItems = [
+        (pkgs.makeDesktopItem {
+          name = "antumbra";
+          desktopName = "Antumbra";
+          exec = "antumbra --tui";
+          terminal = true;
+          categories = [ "Development" ];
+        })
+      ];
     };
 
     devShells.${system}.default = pkgs.mkShell {

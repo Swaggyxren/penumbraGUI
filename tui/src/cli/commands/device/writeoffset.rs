@@ -3,14 +3,14 @@
     SPDX-FileCopyrightText: 2026 Shomy
 */
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::BufReader;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Args;
 use clap_num::maybe_hex;
 use log::info;
-use penumbra::{Device, Storage};
+use penumbra::{Device, MtkPort, Storage};
 
 use crate::cli::DeviceCommand;
 use crate::cli::common::{CONN_DA, CommandMetadata};
@@ -19,10 +19,10 @@ use crate::cli::state::PersistedDeviceState;
 
 #[derive(Args, Debug)]
 pub struct WriteOffArgs {
-    /// The address to read from.
+    /// The address to write to.
     #[clap(value_parser=maybe_hex::<u64>)]
     pub address: u64,
-    /// The number of bytes to read.
+    /// The number of bytes to write.
     #[clap(value_parser=maybe_hex::<usize>)]
     pub length: usize,
     /// The input file
@@ -46,41 +46,35 @@ impl CommandMetadata for WriteOffArgs {
 }
 
 impl DeviceCommand for WriteOffArgs {
-    fn run(&self, dev: &mut Device, state: &mut PersistedDeviceState) -> Result<()> {
+    fn run<P: MtkPort>(&self, dev: &mut Device<P>, state: &mut PersistedDeviceState) -> Result<()> {
         dev.enter_da_mode()?;
 
         state.connection_type = CONN_DA;
         state.flash_mode = 1;
 
-        let file = File::create(&self.input_file)?;
-        let mut writer = BufWriter::new(file);
+        let file = File::open(&self.input_file)?;
+        let mut reader = BufReader::new(file);
 
-        let user_section = dev.dev_info.storage().unwrap().get_user_part();
+        let user_section = dev.get_storage().unwrap().get_user_part();
 
         let pb = AntumbraProgress::new(self.length as u64);
 
         let mut progress_callback = pb.get_callback("Writing...", "Write complete!");
 
-        info!("Reading flash at address {:#X} with size 0x{:X}", self.address, self.length);
+        info!("Writing flash at address {:#X} with size 0x{:X}", self.address, self.length);
 
-        if let Err(e) = dev.read_offset(
+        if let Err(e) = dev.write_offset(
             self.address,
             self.length,
             user_section,
-            &mut writer,
+            &mut reader,
             &mut progress_callback,
         ) {
-            pb.abandon("Read failed!");
-            return Err(e)?;
+            pb.abandon("Write failed!");
+            Err(e)?;
         };
 
-        writer.flush()?;
-
-        info!(
-            "Flash read completed, {:#X} bytes written to '{}'.",
-            self.length,
-            self.input_file.display()
-        );
+        info!("Flash write completed, {:#X} bytes written.", self.length);
 
         Ok(())
     }

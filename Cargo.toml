@@ -2,22 +2,39 @@
 resolver = "3"
 members = [
     "core",
+    "core/penumbra-macros",
     "tui",
     "gui"
 ]
+default-members = ["gui", "tui"]
 
 [workspace.package]
 edition = "2024"
-version = "1.1.0"
 license = "AGPL-3.0-or-later"
-authors = ["Shomy <shomy@shomy.is-a.dev>"]
+authors = ["Shomy <git@itssho.my>"]
 homepage = "https://penumbra.itssho.my"
 repository = "https://github.com/shomykohai/penumbra"
 
-[profile.release]
-opt-level = "z"
-lto = true
+[profile.dev]
+opt-level = 0
+debug = true
+lto = false
+codegen-units = 16
+
+[profile.nightly]
+inherits = "release"
+debug = "line-tables-only"
+lto = "thin"
 codegen-units = 1
-panic = "abort"
+strip = false
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
 strip = "symbols"
 debug = false
+
+[profile.bench]
+inherits = "release"
+debug = true

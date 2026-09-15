@@ -1,0 +1,62 @@
+name: Nightly Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags-ignore:
+      - '*'
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '!docs/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Get commit hash
+        id: vars
+        shell: bash
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libudev-dev
+
+      - name: Build nightly binaries
+        run: cargo build --workspace --profile nightly
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: antumbra-nightly-${{ runner.os }}-${{ steps.vars.outputs.sha_short }}
+          path: |
+            target/nightly/*
+            target/nightly/*.exe
+            !target/nightly/*.d
+            !target/nightly/*.dll
+            !target/nightly/*.exp
+            !target/nightly/*.lib
+            !target/nightly/*.so
+            !target/nightly/*.dylib
+            !target/nightly/*.rlib
+            !target/nightly/build
+            !target/nightly/deps
+            !target/nightly/examples
+            !target/nightly/incremental

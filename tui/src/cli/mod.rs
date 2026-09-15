@@ -11,33 +11,106 @@ pub mod state;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{CommandFactory, Parser};
-use penumbra::Device;
+use clap_num::maybe_hex;
+use penumbra::da::DaLogLevel;
+use penumbra::{Device, MtkPort, PortBackend};
 
 use crate::cli::commands::*;
 use crate::cli::macros::cli_commands;
 use crate::cli::state::PersistedDeviceState;
+use crate::config::AntumbraConfig;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 pub struct CliArgs {
-    /// Run in CLI mode without TUI
+    /// Run in TUI mode. Defaults to CLI mode if not specified.
     #[arg(short, long, global = true)]
-    pub cli: bool,
-    /// Enable verbose logging, including debug information
+    pub tui: bool,
+    /// Enable verbose logging, including debug information.
+    /// This does not influence the DA UART log level.
     #[arg(short, long, global = true)]
     pub verbose: bool,
-    /// The DA file to use
-    #[arg(short, long = "da", value_name = "DA_FILE", global = true)]
+
+    #[arg(
+            short = 'b',
+            long = "backend",
+            global = true,
+            default_value = "auto",
+            help_heading = "Device & Connection Options",
+            value_parser = PossibleValuesParser::new(["auto", "usb", "libusb", "serial"])
+                .map(|s| match s.to_lowercase().as_str() {
+
+                    "auto" => PortBackend::Auto,
+                    #[cfg(not(any(target_os = "macos", target_os = "android")))]
+                    "usb" => PortBackend::Usb,
+                    "libusb" => PortBackend::Libusb,
+                    #[cfg(not(any(target_os = "macos", target_os = "android")))]
+                    "serial" => PortBackend::Serial,
+                    _ => PortBackend::Auto,
+                })
+        )]
+    pub backend: PortBackend,
+
+    /// Optional USB VID. If not specified, the first available device will be used.
+    #[arg(long = "vid", help_heading = "Device & Connection Options", global = true)]
+    #[clap(value_parser=maybe_hex::<u16>)]
+    pub vid: Option<u16>,
+    /// Optional USB PID. If not specified, the first available device will be used.
+    #[arg(long = "pid", help_heading = "Device & Connection Options", global = true)]
+    #[clap(value_parser=maybe_hex::<u16>)]
+    pub pid: Option<u16>,
+
+    /// Sets the DA internal log level.
+    #[arg(
+            short = 'l',
+            long = "log-level",
+            global = true,
+            default_value = "info",
+            help_heading = "Device & Connection Options",
+            value_parser = PossibleValuesParser::new(["trace", "debug", "info", "warning", "warn", "error", "fatal"])
+                .map(|s| match s.to_lowercase().as_str() {
+                    "trace" => DaLogLevel::Trace,
+                    "debug" => DaLogLevel::Debug,
+                    "info" => DaLogLevel::Info,
+                    "warning" | "warn" => DaLogLevel::Warning,
+                    "error" => DaLogLevel::Error,
+                    "fatal" => DaLogLevel::Fatal,
+                    _ => unreachable!(),
+                })
+        )]
+    pub da_log_level: DaLogLevel,
+    /// The DA file to use for entering DA mode.
+    #[arg(
+        short,
+        long = "da",
+        value_name = "DA_FILE",
+        global = true,
+        help_heading = "Device & Connection Options"
+    )]
     pub da_file: Option<PathBuf>,
-    /// The preloader file to use
-    #[arg(short, long = "pl", value_name = "PRELOADER_FILE", global = true)]
+    /// The preloader file to use for the device. This is required when connecting XFlash devices
+    /// in bootrom mode.
+    #[arg(
+        short,
+        long = "pl",
+        value_name = "PRELOADER_FILE",
+        global = true,
+        help_heading = "Device & Connection Options"
+    )]
     pub preloader_file: Option<PathBuf>,
-    /// The auth file for DAA enabled devices
-    #[arg(short, long = "auth", value_name = "AUTH_FILE", global = true)]
+    /// The auth file required for DAA and SLA when connecting in bootrom mode.
+    #[arg(
+        short,
+        long = "auth",
+        value_name = "AUTH_FILE",
+        global = true,
+        help_heading = "Device & Connection Options"
+    )]
     pub auth_file: Option<PathBuf>,
     /// Enable USB DA logging
-    #[arg(long = "usb-log", global = true)]
+    #[arg(long = "usb-log", global = true, help_heading = "Device & Connection Options")]
     pub usb_log: bool,
     /// Subcommands for CLI mode. If provided, TUI mode will be disabled.
     #[command(subcommand)]
@@ -45,7 +118,7 @@ pub struct CliArgs {
 }
 
 pub trait DeviceCommand {
-    fn run(&self, dev: &mut Device, state: &mut PersistedDeviceState) -> Result<()>;
+    fn run<P: MtkPort>(&self, dev: &mut Device<P>, state: &mut PersistedDeviceState) -> Result<()>;
 }
 
 pub trait CliCommand {
@@ -62,28 +135,41 @@ cli_commands! {
         WriteOffset(WriteOffArgs),
         ReadOffset(ReadOffArgs),
         Erase(EraseArgs),
+        WriteAll(WriteAllArgs),
         ReadAll(ReadAllArgs),
+        Scatter(ScatterArgs),
         Seccfg(SeccfgArgs),
         Pgpt(PgptArgs),
         Peek(PeekArgs),
         Poke(PokeArgs),
+        Peek32(Peek32Args),
+        Poke32(Poke32Args),
         Rpmb(RpmbArgs),
         Shutdown(ShutdownArgs),
         Reboot(RebootArgs),
         XFlash(XFlashArgs),
+        StorageInfo(StorageInfoArgs),
         SetActiveSlot(SetActiveSlotArgs),
-        Crash(CrashArgs)
+        GetActiveSlot(GetActiveSlotArgs),
+        Keys(KeysArgs),
+        Efuse(EfuseArgs),
+        Crash(CrashArgs),
+        BootPl(BootPlArgs),
     }
-    cli {}
+    cli {
+        PatchDa(PatchDaArgs),
+    }
 }
 
-pub async fn run_cli(args: &CliArgs) -> Result<()> {
+pub fn run_cli(args: &CliArgs, _config: &AntumbraConfig) -> Result<()> {
     if let Some(cmd) = &args.command {
-        let mut state = PersistedDeviceState::load().await;
+        let mut state = PersistedDeviceState::load();
 
-        cmd.execute(args, &mut state).await?;
+        let result = cmd.execute(args, &mut state);
 
-        state.save().await?;
+        state.save()?;
+
+        result?
     } else {
         CliArgs::command().print_help()?;
     }
