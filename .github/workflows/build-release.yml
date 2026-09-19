@@ -150,24 +150,23 @@ jobs:
           BRANCH=${GITHUB_REF_NAME}
           DATE_UTC=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
 
-          CAPTION=$(cat <<EOF
-          🛠 <b>PenumbraGUI Build Released!</b>
-
-          🖥 <b>Target OS:</b> <code>${{ matrix.target }}</code>
-          📦 <b>File:</b> <code>$ARCHIVE</code>
-          📏 <b>Size:</b> <code>$SIZE</code>
-          ⏱ <b>Compile Time:</b> <code>$DURATION</code>
-          🌿 <b>Branch:</b> <code>$BRANCH</code>
-          📌 <b>Commit:</b> <code>$COMMIT_SHA</code> ("$COMMIT_MSG")
-          🕒 <b>Timestamp:</b> <code>$DATE_UTC</code>
-
-          🔐 <b>SHA-256 Checksum:</b>
-          <code>$HASH</code>
-          EOF
-          )
+          printf "%s\n" \
+            "🛠 <b>PenumbraGUI Build Released!</b>" \
+            "" \
+            "🖥 <b>Target OS:</b> <code>${{ matrix.target }}</code>" \
+            "📦 <b>File:</b> <code>$ARCHIVE</code>" \
+            "📏 <b>Size:</b> <code>$SIZE</code>" \
+            "⏱ <b>Compile Time:</b> <code>$DURATION</code>" \
+            "🌿 <b>Branch:</b> <code>$BRANCH</code>" \
+            "📌 <b>Commit:</b> <code>$COMMIT_SHA</code> (\"$COMMIT_MSG\")" \
+            "🕒 <b>Timestamp:</b> <code>$DATE_UTC</code>" \
+            "" \
+            "🔐 <b>SHA-256 Checksum:</b>" \
+            "<code>$HASH</code>" > caption.txt
 
           curl -s -F document=@"$ARCHIVE" \
                   -F chat_id="$TG_CHAT_ID" \
                   -F parse_mode="HTML" \
-                  -F caption="$CAPTION" \
+                  -F "caption=<caption.txt;type=text/plain;charset=utf-8" \
                   "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument"
+          rm -f caption.txt

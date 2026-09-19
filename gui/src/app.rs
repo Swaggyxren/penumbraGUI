@@ -180,6 +180,20 @@ pub enum ConfirmModal {
     Shutdown,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagViewOs {
+    Linux,
+    Windows,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SettingsSubTab {
+    #[default]
+    PortDrivers,
+    Overrides,
+    General,
+}
+
 pub struct App {
     persisted: Persisted,
     status: ConnStatus,
@@ -197,6 +211,10 @@ pub struct App {
     info_toast: Option<(String, Instant)>,
     error_modal: Option<String>,
     confirm_modal: Option<ConfirmModal>,
+
+    driver_diag: crate::driver_diag::DriverDiagStatus,
+    diag_view_os: DiagViewOs,
+    settings_subtab: SettingsSubTab,
 
     handle: WorkerHandle,
     evt_rx: Receiver<Event>,
@@ -262,6 +280,13 @@ impl App {
             info_toast: None,
             error_modal: None,
             confirm_modal: None,
+            driver_diag: crate::driver_diag::DriverDiagStatus::run(),
+            diag_view_os: if cfg!(target_os = "windows") {
+                DiagViewOs::Windows
+            } else {
+                DiagViewOs::Linux
+            },
+            settings_subtab: SettingsSubTab::default(),
             handle,
             evt_rx,
             log_rx,
@@ -1777,158 +1802,51 @@ impl App {
 
 impl App {
     fn render_settings_tab(&mut self, ui: &mut Ui, palette: &Palette) {
+        // Sub-tabs navigation bar at the top of Settings
+        ui.horizontal(|ui| {
+            let subtabs = [
+                (SettingsSubTab::PortDrivers, "⚡ Connection & Drivers"),
+                (SettingsSubTab::Overrides, "📁 Binary & File Overrides"),
+                (SettingsSubTab::General, "⚙ General & About"),
+            ];
+
+            for (st, label) in subtabs {
+                let is_active = self.settings_subtab == st;
+                if ui
+                    .selectable_label(
+                        is_active,
+                        RichText::new(label).size(12.5).strong().color(
+                            if is_active {
+                                palette.accent
+                            } else {
+                                palette.text_muted
+                            },
+                        ),
+                    )
+                    .clicked()
+                {
+                    self.settings_subtab = st;
+                }
+                ui.add_space(8.0);
+            }
+        });
+
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(10.0);
+
         ScrollArea::vertical().id_salt("settings_scroll").show(ui, |ui| {
-            // Hardware Port Backend Setting
-            Frame::none()
-                .fill(palette.panel_alt)
-                .stroke(Stroke::new(1.0_f32, palette.border))
-                .rounding(Rounding::same(3.0))
-                .inner_margin(Margin::same(14.0))
-                .show(ui, |ui| {
-                    ui.label(RichText::new("Hardware Port Driver Backend").strong().color(palette.text).size(13.5));
-                    ui.add_space(4.0);
-                    ui.label(
-                        RichText::new("Choose which USB or serial driver Penumbra uses to communicate with device BROM.")
-                            .color(palette.text_muted)
-                            .size(11.5),
-                    );
-                    ui.add_space(10.0);
-
-                    let backends = [
-                        BackendChoice::Auto,
-                        BackendChoice::Libusb,
-                        BackendChoice::Usb,
-                        BackendChoice::Serial,
-                    ];
-
-                    for b in backends {
-                        let is_sel = self.persisted.backend == b;
-                        ui.horizontal(|ui| {
-                            ui.radio_value(
-                                &mut self.persisted.backend,
-                                b,
-                                RichText::new(b.label())
-                                    .strong()
-                                    .color(if is_sel { palette.text } else { palette.text_muted })
-                                    .size(12.5),
-                            );
-                            ui.label(
-                                RichText::new(format!("- {}", b.detail()))
-                                    .color(if is_sel { palette.text } else { palette.text_faint })
-                                    .size(11.5),
-                            );
-                        });
-                        ui.add_space(4.0);
-                    }
-                });
-
-            ui.add_space(12.0);
-
-            // Custom Binary Overrides
-            Frame::none()
-                .fill(palette.panel_alt)
-                .stroke(Stroke::new(1.0_f32, palette.border))
-                .rounding(Rounding::same(3.0))
-                .inner_margin(Margin::same(14.0))
-                .show(ui, |ui| {
-                    ui.label(RichText::new("Binary & Authentication Overrides").strong().color(palette.text).size(13.5));
-                    ui.add_space(4.0);
-                    ui.label(
-                        RichText::new("Optional overrides for custom signed Download Agent (DA) and preloader binaries.")
-                            .color(palette.text_muted)
-                            .size(11.5),
-                    );
-                    ui.add_space(12.0);
-
-                    egui::Grid::new("settings_paths_grid")
-                        .num_columns(3)
-                        .spacing([12.0, 8.0])
-                        .show(ui, |ui| {
-                            Self::grid_path_row(
-                                ui,
-                                "Custom DA File:",
-                                &mut self.persisted.da_path,
-                                "Embedded default (da.bin)",
-                                &["bin"],
-                                palette,
-                            );
-                            Self::grid_path_row(
-                                ui,
-                                "Preloader File:",
-                                &mut self.persisted.preloader_path,
-                                "Auto-detected from scatter",
-                                &["bin", "img"],
-                                palette,
-                            );
-                            Self::grid_path_row(
-                                ui,
-                                "SLA Auth File:",
-                                &mut self.persisted.auth_path,
-                                "None (bypass enabled)",
-                                &["bin", "auth"],
-                                palette,
-                            );
-                            Self::grid_folder_row(
-                                ui,
-                                "ROM Backup Directory:",
-                                &mut self.persisted.output_dir,
-                                "~/penumbra_backup",
-                                palette,
-                            );
-                        });
-                });
-
-            ui.add_space(12.0);
-
-            // Interface & Theme
-            Frame::none()
-                .fill(palette.panel_alt)
-                .stroke(Stroke::new(1.0_f32, palette.border))
-                .rounding(Rounding::same(3.0))
-                .inner_margin(Margin::same(14.0))
-                .show(ui, |ui| {
-                    ui.label(RichText::new("Appearance").strong().color(palette.text).size(13.5));
-                    ui.add_space(10.0);
-
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("Color Theme:").color(palette.text).size(12.0));
-                        let prev_theme = self.persisted.theme;
-                        egui::ComboBox::from_id_salt("settings_theme_picker")
-                            .selected_text(RichText::new(self.persisted.theme.label()).size(12.0))
-                            .width(240.0)
-                            .show_ui(ui, |ui| {
-                                for t in ThemeId::ALL {
-                                    ui.selectable_value(&mut self.persisted.theme, *t, t.label());
-                                }
-                            });
-                        if self.persisted.theme != prev_theme {
-                            theme::apply(self.persisted.theme.palette(), ui.ctx());
-                        }
-                    });
-                });
-
-            ui.add_space(12.0);
-
-            // About Penumbra
-            Frame::none()
-                .fill(palette.panel_alt)
-                .stroke(Stroke::new(1.0_f32, palette.border))
-                .rounding(Rounding::same(3.0))
-                .inner_margin(Margin::same(14.0))
-                .show(ui, |ui| {
-                    ui.label(RichText::new("About Penumbra Flasher").strong().color(palette.text).size(13.5));
-                    ui.add_space(6.0);
-                    ui.label(
-                        RichText::new("Version: 2.0.0 | Protocol: MediaTek V5 (XFlash) & V6 (XML)")
-                            .color(palette.text_muted)
-                            .size(11.5),
-                    );
-                    ui.label(
-                        RichText::new("Core engine: penumbra-mtk 2.0.0 | GUI: egui / eframe")
-                            .color(palette.text_muted)
-                            .size(11.5),
-                    );
-                });
+            match self.settings_subtab {
+                SettingsSubTab::PortDrivers => {
+                    self.render_settings_port_drivers(ui, palette);
+                }
+                SettingsSubTab::Overrides => {
+                    self.render_settings_overrides(ui, palette);
+                }
+                SettingsSubTab::General => {
+                    self.render_settings_general(ui, palette);
+                }
+            }
         });
     }
 
@@ -2083,6 +2001,568 @@ impl App {
             }
         });
         ui.end_row();
+    }
+
+    fn render_settings_port_drivers(&mut self, ui: &mut Ui, palette: &Palette) {
+        // Card 1: Hardware Port Backend
+        Frame::none()
+            .fill(palette.panel_alt)
+            .stroke(Stroke::new(1.0_f32, palette.border))
+            .rounding(Rounding::same(3.0))
+            .inner_margin(Margin::same(12.0))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(
+                    RichText::new("Hardware Port Driver Backend")
+                        .strong()
+                        .color(palette.text)
+                        .size(13.5),
+                );
+                ui.add_space(2.0);
+                ui.label(
+                    RichText::new(
+                        "Choose which USB or serial driver Penumbra uses to communicate with device BROM & Preloader.",
+                    )
+                    .color(palette.text_muted)
+                    .size(11.5),
+                );
+                ui.add_space(8.0);
+
+                let backends = [
+                    BackendChoice::Auto,
+                    BackendChoice::Libusb,
+                    BackendChoice::Usb,
+                    BackendChoice::Serial,
+                ];
+
+                for b in backends {
+                    let is_sel = self.persisted.backend == b;
+                    ui.horizontal(|ui| {
+                        ui.radio_value(
+                            &mut self.persisted.backend,
+                            b,
+                            RichText::new(b.label())
+                                .strong()
+                                .color(if is_sel { palette.text } else { palette.text_muted })
+                                .size(12.0),
+                        );
+                        ui.label(
+                            RichText::new(format!("— {}", b.detail()))
+                                .color(if is_sel { palette.text } else { palette.text_faint })
+                                .size(11.5),
+                        );
+                    });
+                    ui.add_space(2.0);
+                }
+            });
+
+        ui.add_space(10.0);
+
+        // Card 2: Driver & System Permissions Diagnostics
+        Frame::none()
+            .fill(palette.panel_alt)
+            .stroke(Stroke::new(1.0_f32, palette.border))
+            .rounding(Rounding::same(3.0))
+            .inner_margin(Margin::same(12.0))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+
+                // Header row: Title + Status Pill + Re-scan button
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("Driver & System Permissions Diagnostics")
+                            .strong()
+                            .color(palette.text)
+                            .size(13.5),
+                    );
+
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui
+                            .button(RichText::new("↻ Re-scan").size(11.0).color(palette.text))
+                            .on_hover_text("Re-run driver and permissions diagnostic scan")
+                            .clicked()
+                        {
+                            self.driver_diag = crate::driver_diag::DriverDiagStatus::run();
+                            self.toast("Driver diagnostics re-scanned.");
+                        }
+
+                        let (status_text, status_color) = match self.driver_diag.overall_level {
+                            crate::driver_diag::DiagLevel::Ok => {
+                                ("✔ System Ready", palette.success)
+                            }
+                            crate::driver_diag::DiagLevel::Warning => {
+                                ("⚠ Warnings Detected", palette.warn)
+                            }
+                            crate::driver_diag::DiagLevel::ActionRequired => {
+                                ("✖ Setup Required", palette.error)
+                            }
+                        };
+
+                        Frame::none()
+                            .fill(palette.panel)
+                            .stroke(Stroke::new(1.0_f32, status_color))
+                            .rounding(Rounding::same(2.0))
+                            .inner_margin(Margin::symmetric(8.0, 3.0))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    RichText::new(status_text)
+                                        .color(status_color)
+                                        .size(11.0)
+                                        .strong(),
+                                );
+                            });
+                    });
+                });
+
+                ui.add_space(2.0);
+                ui.label(
+                    RichText::new(format!(
+                        "Host OS: {} — Checks USB permissions, udev rules, and MediaTek COM/CDC drivers required for device communication.",
+                        self.driver_diag.os_name
+                    ))
+                    .color(palette.text_muted)
+                    .size(11.5),
+                );
+                ui.add_space(8.0);
+
+                // OS Selector Toggle
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Diagnostic Guide:").color(palette.text).size(12.0));
+                    ui.add_space(6.0);
+
+                    let is_linux = self.diag_view_os == DiagViewOs::Linux;
+                    let is_win = self.diag_view_os == DiagViewOs::Windows;
+
+                    let linux_title = if cfg!(target_os = "linux") {
+                        "Linux (udev rules & groups) [Host]"
+                    } else {
+                        "Linux (udev rules & groups)"
+                    };
+
+                    let win_title = if cfg!(target_os = "windows") {
+                        "Windows (VCOM & WinUSB) [Host]"
+                    } else {
+                        "Windows (VCOM & WinUSB)"
+                    };
+
+                    if ui
+                        .selectable_label(
+                            is_linux,
+                            RichText::new(linux_title).size(11.5).strong().color(
+                                if is_linux {
+                                    palette.accent
+                                } else {
+                                    palette.text_muted
+                                },
+                            ),
+                        )
+                        .clicked()
+                    {
+                        self.diag_view_os = DiagViewOs::Linux;
+                    }
+
+                    if ui
+                        .selectable_label(
+                            is_win,
+                            RichText::new(win_title).size(11.5).strong().color(
+                                if is_win {
+                                    palette.accent
+                                } else {
+                                    palette.text_muted
+                                },
+                            ),
+                        )
+                        .clicked()
+                    {
+                        self.diag_view_os = DiagViewOs::Windows;
+                    }
+                });
+
+                ui.add_space(8.0);
+
+                // Content based on selected tab
+                match self.diag_view_os {
+                    DiagViewOs::Linux => {
+                        self.render_linux_diag_view(ui, palette);
+                    }
+                    DiagViewOs::Windows => {
+                        self.render_windows_diag_view(ui, palette);
+                    }
+                }
+            });
+    }
+
+    fn render_linux_diag_view(&mut self, ui: &mut Ui, palette: &Palette) {
+        if self.driver_diag.is_linux {
+            ui.label(
+                RichText::new("Detected System Status:")
+                    .color(palette.text)
+                    .size(12.0)
+                    .strong(),
+            );
+            ui.add_space(3.0);
+
+            for item in &self.driver_diag.items {
+                let (sym, col) = match item.level {
+                    crate::driver_diag::DiagLevel::Ok => ("✔", palette.success),
+                    crate::driver_diag::DiagLevel::Warning => ("⚠", palette.warn),
+                    crate::driver_diag::DiagLevel::ActionRequired => ("✖", palette.error),
+                };
+
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(sym).color(col).strong().size(12.0));
+                    ui.label(RichText::new(&item.title).strong().color(palette.text).size(12.0));
+                    ui.label(
+                        RichText::new(format!("— {}", item.detail))
+                            .color(palette.text_muted)
+                            .size(11.5),
+                    );
+                });
+                ui.add_space(1.0);
+            }
+        } else {
+            ui.label(
+                RichText::new("Reference Guide for Linux Systems (Ubuntu, Debian, Fedora, Arch, etc.):")
+                    .color(palette.text_muted)
+                    .size(11.5),
+            );
+        }
+
+        ui.add_space(8.0);
+        let script = self
+            .driver_diag
+            .bash_commands
+            .clone()
+            .unwrap_or_else(crate::driver_diag::DriverDiagStatus::linux_setup_commands);
+
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("Terminal Setup Commands (grant non-root USB access & filter ModemManager):")
+                    .strong()
+                    .color(palette.text)
+                    .size(12.0),
+            );
+
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui
+                    .button(
+                        RichText::new("📋 Copy Commands")
+                            .size(11.0)
+                            .strong()
+                            .color(palette.accent),
+                    )
+                    .on_hover_text("Copy bash setup commands to clipboard")
+                    .clicked()
+                {
+                    ui.output_mut(|o| o.copied_text = script.clone());
+                    self.toast("Copied Linux setup commands to clipboard!");
+                }
+            });
+        });
+        ui.add_space(3.0);
+
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0_f32, palette.border_soft))
+            .rounding(Rounding::same(2.0))
+            .inner_margin(Margin::same(8.0))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(
+                    RichText::new(&script)
+                        .family(egui::FontFamily::Monospace)
+                        .color(palette.text)
+                        .size(10.5),
+                );
+            });
+
+        ui.add_space(3.0);
+        ui.label(
+            RichText::new("Tip: Log out and back in or reboot after running commands to apply group changes.")
+                .color(palette.text_faint)
+                .size(10.5),
+        );
+    }
+
+    fn render_windows_diag_view(&mut self, ui: &mut Ui, palette: &Palette) {
+        if self.driver_diag.is_windows {
+            ui.label(
+                RichText::new("Detected System Status:")
+                    .color(palette.text)
+                    .size(12.0)
+                    .strong(),
+            );
+            ui.add_space(3.0);
+
+            for item in &self.driver_diag.items {
+                let (sym, col) = match item.level {
+                    crate::driver_diag::DiagLevel::Ok => ("✔", palette.success),
+                    crate::driver_diag::DiagLevel::Warning => ("⚠", palette.warn),
+                    crate::driver_diag::DiagLevel::ActionRequired => ("✖", palette.error),
+                };
+
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(sym).color(col).strong().size(12.0));
+                    ui.label(RichText::new(&item.title).strong().color(palette.text).size(12.0));
+                    ui.label(
+                        RichText::new(format!("— {}", item.detail))
+                            .color(palette.text_muted)
+                            .size(11.5),
+                    );
+                });
+                ui.add_space(1.0);
+            }
+        } else {
+            ui.label(
+                RichText::new("Reference Guide for Windows 10 & 11:")
+                    .color(palette.text_muted)
+                    .size(11.5),
+            );
+        }
+
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("MediaTek Windows Driver Setup Guide:")
+                    .strong()
+                    .color(palette.text)
+                    .size(12.0),
+            );
+
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui
+                    .button(
+                        RichText::new("📋 Copy Guide")
+                            .size(11.0)
+                            .color(palette.accent)
+                            .strong(),
+                    )
+                    .clicked()
+                {
+                    let guide = self
+                        .driver_diag
+                        .instructions
+                        .clone()
+                        .unwrap_or_else(|| {
+                            crate::driver_diag::DriverDiagStatus::windows_instructions().to_string()
+                        });
+                    ui.output_mut(|o| o.copied_text = guide);
+                    self.toast("Copied Windows driver guide to clipboard!");
+                }
+
+                if ui
+                    .button(
+                        RichText::new("🌐 Zadig Site")
+                            .size(11.0)
+                            .color(palette.text),
+                    )
+                    .on_hover_text("Open official Zadig tool page in default browser")
+                    .clicked()
+                {
+                    ui.ctx().open_url(egui::output::OpenUrl::new_tab("https://zadig.akeo.ie"));
+                }
+
+                if cfg!(target_os = "windows") {
+                    if ui
+                        .button(
+                            RichText::new("🛠 Device Manager")
+                                .size(11.0)
+                                .color(palette.text),
+                        )
+                        .on_hover_text("Opens devmgmt.msc to inspect COM / Ports")
+                        .clicked()
+                    {
+                        crate::driver_diag::DriverDiagStatus::open_device_manager();
+                    }
+                }
+            });
+        });
+        ui.add_space(4.0);
+
+        Frame::none()
+            .fill(palette.panel)
+            .stroke(Stroke::new(1.0_f32, palette.border_soft))
+            .rounding(Rounding::same(2.0))
+            .inner_margin(Margin::same(10.0))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let steps = [
+                    (
+                        "1. MediaTek Preloader USB VCOM Driver:",
+                        "Install the MediaTek USB VCOM driver. Without this driver, Windows may cycle connection and disconnection repeatedly when the device enters BROM / Preloader mode.",
+                    ),
+                    (
+                        "2. LibUSB Backend (WinUSB):",
+                        "If using the LibUSB port backend, open Zadig (https://zadig.akeo.ie), check 'Options > List All Devices', select 'MediaTek USB Port' (VID: 0E8D), and replace the driver with WinUSB.",
+                    ),
+                    (
+                        "3. Driver Signature Enforcement:",
+                        "On Windows 10/11, if the driver fails to install due to unsigned INF files, temporarily disable Driver Signature Enforcement in Windows Advanced Startup Options.",
+                    ),
+                    (
+                        "4. Connection Handshake:",
+                        "Power off the device completely. Hold Volume Down (or Volume Up on some models) and insert the USB cable while Penumbra is waiting for a connection.",
+                    ),
+                ];
+
+                for (title, desc) in steps {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(title).strong().color(palette.accent).size(11.5));
+                        ui.label(RichText::new(desc).color(palette.text_muted).size(11.0));
+                    });
+                    ui.add_space(4.0);
+                }
+            });
+    }
+
+    fn render_settings_overrides(&mut self, ui: &mut Ui, palette: &Palette) {
+        Frame::none()
+            .fill(palette.panel_alt)
+            .stroke(Stroke::new(1.0_f32, palette.border))
+            .rounding(Rounding::same(3.0))
+            .inner_margin(Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(
+                    RichText::new("Binary & Authentication Overrides")
+                        .strong()
+                        .color(palette.text)
+                        .size(13.5),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(
+                        "Optional overrides for custom signed Download Agent (DA) and preloader binaries, and default backup destination.",
+                    )
+                    .color(palette.text_muted)
+                    .size(11.5),
+                );
+                ui.add_space(14.0);
+
+                egui::Grid::new("settings_paths_grid")
+                    .num_columns(3)
+                    .spacing([14.0, 10.0])
+                    .min_col_width(140.0)
+                    .show(ui, |ui| {
+                        Self::grid_path_row(
+                            ui,
+                            "Custom DA File:",
+                            &mut self.persisted.da_path,
+                            "Embedded default (da.bin)",
+                            &["bin"],
+                            palette,
+                        );
+                        Self::grid_path_row(
+                            ui,
+                            "Preloader File:",
+                            &mut self.persisted.preloader_path,
+                            "Auto-detected from scatter",
+                            &["bin", "img"],
+                            palette,
+                        );
+                        Self::grid_path_row(
+                            ui,
+                            "SLA Auth File:",
+                            &mut self.persisted.auth_path,
+                            "None (bypass enabled)",
+                            &["bin", "auth"],
+                            palette,
+                        );
+                        Self::grid_folder_row(
+                            ui,
+                            "ROM Backup Directory:",
+                            &mut self.persisted.output_dir,
+                            "~/penumbra_backup",
+                            palette,
+                        );
+                    });
+            });
+    }
+
+    fn render_settings_general(&mut self, ui: &mut Ui, palette: &Palette) {
+        // Appearance
+        Frame::none()
+            .fill(palette.panel_alt)
+            .stroke(Stroke::new(1.0_f32, palette.border))
+            .rounding(Rounding::same(3.0))
+            .inner_margin(Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(RichText::new("Appearance").strong().color(palette.text).size(13.5));
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new("Choose desktop color theme and typography style.")
+                        .color(palette.text_muted)
+                        .size(11.5),
+                );
+                ui.add_space(12.0);
+
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Color Theme:").color(palette.text).size(12.0));
+                    let prev_theme = self.persisted.theme;
+                    egui::ComboBox::from_id_salt("settings_theme_picker")
+                        .selected_text(RichText::new(self.persisted.theme.label()).size(12.0))
+                        .width(260.0)
+                        .show_ui(ui, |ui| {
+                            for t in ThemeId::ALL {
+                                ui.selectable_value(&mut self.persisted.theme, *t, t.label());
+                            }
+                        });
+                    if self.persisted.theme != prev_theme {
+                        theme::apply(self.persisted.theme.palette(), ui.ctx());
+                    }
+                });
+            });
+
+        ui.add_space(12.0);
+
+        // About Penumbra Flasher
+        Frame::none()
+            .fill(palette.panel_alt)
+            .stroke(Stroke::new(1.0_f32, palette.border))
+            .rounding(Rounding::same(3.0))
+            .inner_margin(Margin::same(16.0))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(
+                    RichText::new("About Penumbra Flasher")
+                        .strong()
+                        .color(palette.text)
+                        .size(13.5),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new("Universal MediaTek ROM & Partition Flashing Desktop Interface")
+                        .color(palette.text_muted)
+                        .size(11.5),
+                );
+                ui.add_space(12.0);
+
+                egui::Grid::new("about_info_grid")
+                    .num_columns(2)
+                    .spacing([20.0, 8.0])
+                    .show(ui, |ui| {
+                        ui.label(RichText::new("Application Version:").color(palette.text_muted).size(11.5));
+                        ui.label(RichText::new("2.0.0").strong().color(palette.text).size(11.5));
+                        ui.end_row();
+
+                        ui.label(RichText::new("Core Flasher Engine:").color(palette.text_muted).size(11.5));
+                        ui.label(RichText::new("penumbra-mtk 2.0.0 (Rust)").strong().color(palette.text).size(11.5));
+                        ui.end_row();
+
+                        ui.label(RichText::new("Supported Protocols:").color(palette.text_muted).size(11.5));
+                        ui.label(RichText::new("MediaTek V5 (XFlash binary) & V6 (XML Download Agent)").color(palette.text).size(11.5));
+                        ui.end_row();
+
+                        ui.label(RichText::new("GUI Framework:").color(palette.text_muted).size(11.5));
+                        ui.label(RichText::new("egui 0.29 / eframe").color(palette.text).size(11.5));
+                        ui.end_row();
+
+                        ui.label(RichText::new("License:").color(palette.text_muted).size(11.5));
+                        ui.label(RichText::new("AGPL-3.0-or-later").color(palette.accent).size(11.5));
+                        ui.end_row();
+                    });
+            });
     }
 }
 

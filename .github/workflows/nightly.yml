@@ -2,14 +2,6 @@ name: Nightly Build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    tags-ignore:
-      - '*'
-    paths:
-      - '**.rs'
-      - '**.toml'
-      - '!docs/**'
 
 permissions:
   contents: read
